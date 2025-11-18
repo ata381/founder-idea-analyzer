@@ -47,4 +47,43 @@ router.get('/:id', async (req, res) => {
   }
 });
 
+// GET /api/ideas/demo
+router.get('/demo/list', (req, res) => {
+  try {
+    const samples = [
+      {
+        problem: 'Users waste time finding the right template for contracts',
+        solution: '',
+        audience: 'freelancers',
+        alternatives: 'generic templates, lawyers',
+        technology: 'webapp, node'
+      },
+      {
+        problem: 'Small retailers struggle to manage inventory across channels',
+        solution: '',
+        audience: 'small retailers',
+        alternatives: 'excel, pos systems',
+        technology: 'webapp, integrations'
+      },
+      {
+        problem: 'Remote teams have trouble running async retrospectives',
+        solution: '',
+        audience: 'remote engineering teams',
+        alternatives: 'zoom, miro',
+        technology: 'saas, node, react'
+      }
+    ];
+
+    const results = samples.map((s) => {
+      const insights = generateScores(s);
+      const leanCanvas = draftLeanCanvas(s);
+      return { ...s, createdAt: new Date(), insights: { ...insights, leanCanvas }, _id: null, saved: false };
+    });
+    res.json(results);
+  } catch (err) {
+    console.error('Error generating demo list', err);
+    res.status(500).json({ error: 'Unable to generate demo list' });
+  }
+});
+
 module.exports = router;
