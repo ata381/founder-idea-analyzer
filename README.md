@@ -1,0 +1,1 @@
+# founder-idea-analyzer
