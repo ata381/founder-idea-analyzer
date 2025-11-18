@@ -55,13 +55,22 @@
       </form>
 
       <h3>Insight Output</h3>
-      <pre id="insight-output" style="background:#020617;padding:12px;border-radius:8px;max-height:160px;overflow:auto">No result yet.</pre>
+      <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-start;">
+        <div style="flex:1;min-width:280px;">
+          <canvas id="radar-chart" style="background:#0b1120;border-radius:8px;padding:8px;max-height:320px;width:100%"></canvas>
+        </div>
+        <div style="flex:1;min-width:280px;">
+          <pre id="insight-output" style="background:#020617;padding:12px;border-radius:8px;max-height:160px;overflow:auto">No result yet.</pre>
+        </div>
+      </div>
 
-      <h3>Lean Canvas</h3>
-      <pre id="canvas-output" style="background:#020617;padding:12px;border-radius:8px;max-height:240px;overflow:auto">No canvas yet.</pre>
+      <h3 style="margin-top:18px">Lean Canvas (draft)</h3>
+      <div id="canvas-grid" style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:8px"></div>
 
       <p style="margin-top:10px;">Server health: <code>GET /health</code></p>
     </div>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="/charts.js"></script>
     <script src="/app.js"></script>
   </body>
 </html>

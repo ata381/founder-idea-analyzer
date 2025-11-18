@@ -28,10 +28,15 @@ document.addEventListener('DOMContentLoaded', () => {
       const json = await postIdea(data);
       // show the insights
       output.textContent = JSON.stringify(json.insights, null, 2);
-      // show the lean canvas (prettified)
-      if (json.insights && json.insights.leanCanvas) {
-        const lc = json.insights.leanCanvas;
-        canvasOut.textContent = Object.entries(lc).map(([k,v]) => `${k}: ${v}`).join('\n\n');
+      // render radar chart (if Chart.js available)
+      if (window.renderRadar && json.insights) {
+        renderRadar(json.insights);
+      }
+      // render the lean canvas grid
+      if (window.renderLeanCanvasGrid && json.insights && json.insights.leanCanvas) {
+        renderLeanCanvasGrid(json.insights.leanCanvas);
+      } else if (json.insights && json.insights.leanCanvas) {
+        canvasOut.textContent = Object.entries(json.insights.leanCanvas).map(([k,v]) => `${k}: ${v}`).join('\n\n');
       } else {
         canvasOut.textContent = 'No canvas returned.';
       }
