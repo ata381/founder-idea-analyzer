@@ -4,6 +4,7 @@
     <meta charset="utf-8" />
     <title>Founder Idea Analyzer – Iteration 0</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="stylesheet" href="/style.css">
     <style>
       body {
         margin: 0;
@@ -44,6 +45,14 @@
     <div class="card">
       <h1>Founder Idea Analyzer</h1>
       <p>Submit an idea to generate heuristic insights (Iteration 1 demo).</p>
+
+      <div class="controls">
+        <div>
+          <button id="prev-demo" type="button" class="secondary">◀ Prev demo</button>
+          <button id="next-demo" type="button" class="secondary">Next demo ▶</button>
+        </div>
+        <div id="demo-note" class="demo-note">Loading demo result...</div>
+      </div>
 
       <form id="idea-form">
         <label>Problem (describe the core pain or need)<br><textarea id="problem" rows="3" placeholder="Describe the problem your users face" style="width:100%"></textarea></label>

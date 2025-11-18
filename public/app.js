@@ -13,12 +13,26 @@ document.addEventListener('DOMContentLoaded', () => {
   const form = el('idea-form');
   const output = el('insight-output');
   const canvasOut = el('canvas-output');
-  const demoNote = document.createElement('div');
-  demoNote.style.color = '#9ca3af';
-  demoNote.style.fontSize = '0.9rem';
-  demoNote.style.marginBottom = '8px';
-  demoNote.textContent = 'Loading demo result...';
-  form.parentNode.insertBefore(demoNote, form);
+  const demoNote = el('demo-note');
+  const prevBtn = el('prev-demo');
+  const nextBtn = el('next-demo');
+  let demoList = [];
+  let demoIndex = 0;
+
+  function renderDemo(idx) {
+    if (!Array.isArray(demoList) || demoList.length === 0) return;
+    demoIndex = (idx + demoList.length) % demoList.length;
+    const demo = demoList[demoIndex];
+    renderInsights(demo.insights, output);
+    if (window.renderRadar) renderRadar(demo.insights);
+    if (window.renderLeanCanvasGrid && demo.insights && demo.insights.leanCanvas) {
+      renderLeanCanvasGrid(demo.insights.leanCanvas);
+    }
+    demoNote.textContent = `Demo ${demoIndex + 1} of ${demoList.length} — use Prev/Next to cycle.`;
+  }
+
+  if (prevBtn) prevBtn.addEventListener('click', () => renderDemo(demoIndex - 1));
+  if (nextBtn) nextBtn.addEventListener('click', () => renderDemo(demoIndex + 1));
 
   // Load demo result on page load
   (async function loadDemo(){
@@ -27,13 +41,8 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!r.ok) { demoNote.textContent = 'Demo unavailable.'; return; }
       const list = await r.json();
       if (Array.isArray(list) && list.length) {
-        const demo = list[0];
-        renderInsights(demo.insights, output);
-        if (window.renderRadar) renderRadar(demo.insights);
-        if (window.renderLeanCanvasGrid && demo.insights && demo.insights.leanCanvas) {
-          renderLeanCanvasGrid(demo.insights.leanCanvas);
-        }
-        demoNote.textContent = 'Demo result loaded. Use the form to analyze your idea.';
+        demoList = list;
+        renderDemo(0);
       } else {
         demoNote.textContent = 'No demo samples available.';
       }
