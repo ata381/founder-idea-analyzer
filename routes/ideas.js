@@ -10,11 +10,28 @@ router.post('/', async (req, res) => {
     const insights = generateScores({ problem, solution, audience, alternatives, technology });
     const leanCanvas = draftLeanCanvas({ problem, solution, audience, alternatives, technology });
     const idea = new Idea({ problem, solution, audience, alternatives, technology, insights: { ...insights, leanCanvas } });
-    await idea.save();
-    res.status(201).json(idea);
+    try {
+      const saved = await idea.save();
+      return res.status(201).json(saved);
+    } catch (saveErr) {
+      // If DB isn't available (e.g., during local demo without Mongo), return the generated result anyway
+      console.error('DB save failed, returning fallback response', saveErr.message || saveErr);
+      const fallback = {
+        problem,
+        solution,
+        audience,
+        alternatives,
+        technology,
+        createdAt: new Date(),
+        insights: { ...insights, leanCanvas },
+        _id: null,
+        saved: false
+      };
+      return res.status(201).json(fallback);
+    }
   } catch (err) {
     console.error('Error saving idea', err);
-    res.status(500).json({ error: 'Unable to save idea' });
+    res.status(500).json({ error: 'Unable to process idea' });
   }
 });
 
