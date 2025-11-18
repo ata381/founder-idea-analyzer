@@ -28,7 +28,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const list = await r.json();
       if (Array.isArray(list) && list.length) {
         const demo = list[0];
-        output.textContent = JSON.stringify(demo.insights, null, 2);
+        renderInsights(demo.insights, output);
         if (window.renderRadar) renderRadar(demo.insights);
         if (window.renderLeanCanvasGrid && demo.insights && demo.insights.leanCanvas) {
           renderLeanCanvasGrid(demo.insights.leanCanvas);
@@ -55,7 +55,7 @@ document.addEventListener('DOMContentLoaded', () => {
     try {
       const json = await postIdea(data);
       // show the insights
-      output.textContent = JSON.stringify(json.insights, null, 2);
+      renderInsights(json.insights, output);
       // render radar chart (if Chart.js available)
       if (window.renderRadar && json.insights) {
         renderRadar(json.insights);
@@ -73,3 +73,51 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 });
+
+function escapeHtml(s) {
+  return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function nl2br(s) {
+  return escapeHtml(s).replace(/\n/g, '<br>');
+}
+
+function renderInsights(insights, container) {
+  if (!insights) { container.innerHTML = '<div>No insights</div>'; return; }
+  const scores = [
+    ['Problem validation', insights.problemValidationScore],
+    ['Market maturity', insights.marketMaturity],
+    ['Competition density', insights.competitionDensity],
+    ['Differentiation', insights.differentiationPotential],
+    ['Technical feasibility', insights.technicalFeasibility],
+    ['Risk / Uncertainty', insights.riskAndUncertainty]
+  ];
+
+  const lc = insights.leanCanvas || {};
+  const suggested = lc.SuggestedSolution || null;
+  const solution = lc.Solution || null;
+
+  let html = '';
+  html += '<div style="display:flex;flex-direction:column;gap:8px">';
+  scores.forEach(([label, val]) => {
+    const v = (typeof val === 'number') ? val : 0;
+    html += `<div style="display:flex;align-items:center;gap:8px"><div style="width:160px;color:#cbd5e1;font-size:0.9rem">${label}</div><div style="flex:1;background:#071028;border-radius:6px;height:12px;overflow:hidden"><div style="height:100%;width:${v}%;background:linear-gradient(90deg,#6366f1,#06b6d4);"></div></div><div style="width:40px;text-align:right;color:#93c5fd;font-size:0.9rem">${v}</div></div>`;
+  });
+
+  if (suggested && suggested === solution) {
+    html += `<div style="margin-top:8px;color:#e6eef8"><strong>Suggested solution</strong><div style="margin-top:6px;color:#cbd5e1">${nl2br(suggested)}</div></div>`;
+  } else if (solution && suggested) {
+    html += `<div style="margin-top:8px;color:#e6eef8"><strong>Provided solution</strong><div style="margin-top:6px;color:#cbd5e1">${nl2br(solution)}</div></div>`;
+    html += `<div style="margin-top:8px;color:#e6eef8"><strong>Suggested solution</strong><div style="margin-top:6px;color:#cbd5e1">${nl2br(suggested)}</div></div>`;
+  } else if (solution) {
+    html += `<div style="margin-top:8px;color:#e6eef8"><strong>Solution</strong><div style="margin-top:6px;color:#cbd5e1">${nl2br(solution)}</div></div>`;
+  }
+
+  if (lc.UniqueValueProposition) {
+    html += `<div style="margin-top:8px;color:#e6eef8"><strong>Unique value proposition</strong><div style="margin-top:6px;color:#cbd5e1">${nl2br(lc.UniqueValueProposition)}</div></div>`;
+  }
+
+  html += '</div>';
+  container.innerHTML = html;
+}
+
