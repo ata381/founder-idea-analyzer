@@ -46,16 +46,19 @@
       <p>Submit an idea to generate heuristic insights (Iteration 1 demo).</p>
 
       <form id="idea-form">
-        <label>Problem<br><textarea id="problem" rows="3" style="width:100%"></textarea></label>
-        <label>Solution<br><textarea id="solution" rows="3" style="width:100%"></textarea></label>
-        <label>Audience<br><input id="audience" style="width:100%"></input></label>
-        <label>Alternatives (comma separated)<br><input id="alternatives" style="width:100%"></input></label>
-        <label>Technology<br><input id="technology" style="width:100%"></input></label>
+        <label>Problem (describe the core pain or need)<br><textarea id="problem" rows="3" placeholder="Describe the problem your users face" style="width:100%"></textarea></label>
+        <label>Solution (optional — leave blank to receive a suggested solution)<br><textarea id="solution" rows="3" placeholder="Optional: describe your proposed solution" style="width:100%"></textarea></label>
+        <label>Target Audience (who benefits?)<br><input id="audience" placeholder="e.g., early-stage SMBs, remote teams" style="width:100%"></input></label>
+        <label>Alternatives / Competitors (short list)<br><input id="alternatives" placeholder="Comma-separated" style="width:100%"></input></label>
+        <label>Technology (what tech is required / planned)<br><input id="technology" placeholder="Node, React, ML, no-code, etc." style="width:100%"></input></label>
         <div style="margin-top:10px;"><button type="submit">Analyze Idea</button></div>
       </form>
 
       <h3>Insight Output</h3>
-      <pre id="insight-output" style="background:#020617;padding:12px;border-radius:8px;max-height:240px;overflow:auto">No result yet.</pre>
+      <pre id="insight-output" style="background:#020617;padding:12px;border-radius:8px;max-height:160px;overflow:auto">No result yet.</pre>
+
+      <h3>Lean Canvas</h3>
+      <pre id="canvas-output" style="background:#020617;padding:12px;border-radius:8px;max-height:240px;overflow:auto">No canvas yet.</pre>
 
       <p style="margin-top:10px;">Server health: <code>GET /health</code></p>
     </div>

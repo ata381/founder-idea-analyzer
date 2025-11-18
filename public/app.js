@@ -21,10 +21,20 @@ document.addEventListener('DOMContentLoaded', () => {
       alternatives: el('alternatives').value,
       technology: el('technology').value
     };
+    const canvasOut = el('canvas-output');
     output.textContent = 'Analyzing…';
+    canvasOut.textContent = '';
     try {
       const json = await postIdea(data);
+      // show the insights
       output.textContent = JSON.stringify(json.insights, null, 2);
+      // show the lean canvas (prettified)
+      if (json.insights && json.insights.leanCanvas) {
+        const lc = json.insights.leanCanvas;
+        canvasOut.textContent = Object.entries(lc).map(([k,v]) => `${k}: ${v}`).join('\n\n');
+      } else {
+        canvasOut.textContent = 'No canvas returned.';
+      }
     } catch (err) {
       output.textContent = 'Error: ' + err.message;
     }
