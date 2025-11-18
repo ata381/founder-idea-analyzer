@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="tr">
+  <head>
+    <meta charset="utf-8" />
+    <title>Founder Idea Analyzer – Iteration 0</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+      body {
+        margin: 0;
+        padding: 0;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+        background: #020617;
+        color: #f9fafb;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 100vh;
+      }
+      .card {
+        background: #0b1120;
+        border-radius: 16px;
+        padding: 20px 22px;
+        border: 1px solid #112;
+        max-width: 480px;
+        box-shadow: 0 18px 40px rgba(15, 23, 42, 0.7);
+      }
+      h1 {
+        margin-top: 0;
+        font-size: 1.4rem;
+      }
+      p {
+        font-size: 0.9rem;
+        color: #9ca3af;
+      }
+      code {
+        font-size: 0.8rem;
+        background: #020617;
+        padding: 2px 4px;
+        border-radius: 4px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <h1>Founder Idea Analyzer</h1>
+      <p>Submit an idea to generate heuristic insights (Iteration 1 demo).</p>
+
+      <form id="idea-form">
+        <label>Problem<br><textarea id="problem" rows="3" style="width:100%"></textarea></label>
+        <label>Solution<br><textarea id="solution" rows="3" style="width:100%"></textarea></label>
+        <label>Audience<br><input id="audience" style="width:100%"></input></label>
+        <label>Alternatives (comma separated)<br><input id="alternatives" style="width:100%"></input></label>
+        <label>Technology<br><input id="technology" style="width:100%"></input></label>
+        <div style="margin-top:10px;"><button type="submit">Analyze Idea</button></div>
+      </form>
+
+      <h3>Insight Output</h3>
+      <pre id="insight-output" style="background:#020617;padding:12px;border-radius:8px;max-height:240px;overflow:auto">No result yet.</pre>
+
+      <p style="margin-top:10px;">Server health: <code>GET /health</code></p>
+    </div>
+    <script src="/app.js"></script>
+  </body>
+</html>

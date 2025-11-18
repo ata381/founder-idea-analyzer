@@ -15,6 +15,9 @@ app.use(cors());
 app.use(express.json());
 app.use(morgan('dev'));
 
+// API routes
+app.use('/api/ideas', require('./routes/ideas'));
+
 // Basit health-check endpoint
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', env: process.env.NODE_ENV || 'dev' });
