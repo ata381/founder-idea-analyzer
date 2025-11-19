@@ -48,12 +48,31 @@
           <h3 style="margin-top:18px">Lean Canvas (draft)</h3>
           <div id="canvas-grid" style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:8px"></div>
 
+          <h3 style="margin-top:18px">Mentor Dashboard (Iteration 3)</h3>
+          <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-start;">
+            <div style="flex:1;min-width:280px;">
+              <div id="mentor-cards" style="display:flex;flex-direction:column;gap:8px">
+                <div id="awareness-delta" class="card" style="padding:12px;background:linear-gradient(180deg,#071028,#041126);">Awareness Delta: <span id="awareness-delta-text">—</span></div>
+                <div id="blind-spots" class="card" style="padding:12px;background:linear-gradient(180deg,#071028,#041126);">Blind Spots: <div id="blind-spots-list" style="margin-top:6px;color:#cbd5e1">—</div></div>
+                <div id="weekly-summary" class="card" style="padding:12px;background:linear-gradient(180deg,#071028,#041126);">Weekly AI Summary: <div id="weekly-summary-text" style="margin-top:6px;color:#cbd5e1">—</div></div>
+              </div>
+            </div>
+            <div style="flex:1;min-width:280px;">
+              <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+                <button id="save-revision" class="secondary">Save revision</button>
+                <button id="compare-versions">Compare first ↔ latest</button>
+                <button id="populate-demo" class="secondary">Populate demo revisions</button>
+              </div>
+              <div id="comparison-output" style="background:#020617;padding:12px;border-radius:8px;max-height:220px;overflow:auto;color:#e6eef8;font-family:system-ui">No comparison run yet.</div>
+            </div>
+          </div>
+
           <p style="margin-top:10px;">Server health: <code>GET /health</code></p>
         </div>
       </div>
     </div>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="/charts.js"></script>
-    <script src="/app.js"></script>
+    <script src="/charts.js?v=3"></script>
+    <script src="/app.js?v=3"></script>
   </body>
 </html>

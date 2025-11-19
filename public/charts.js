@@ -21,13 +21,40 @@ function renderRadar(insights) {
   ];
 
   const ctx = document.getElementById('radar-chart').getContext('2d');
-
+  // If chart exists just update the data for smooth live updates
   if (_radarChart) {
     _radarChart.data.labels = labels;
     _radarChart.data.datasets[0].data = values;
     _radarChart.update();
     return;
   }
+
+  // Create a subtle gradient fill for the dataset
+  const gradient = ctx.createLinearGradient(0, 0, 0, ctx.canvas.height || 300);
+  gradient.addColorStop(0, 'rgba(99,102,241,0.28)');
+  gradient.addColorStop(1, 'rgba(99,102,241,0.08)');
+  // Plugin to draw numeric labels near each data point (no external deps)
+  const valueLabelPlugin = {
+    id: 'valueLabelPlugin',
+    afterDatasetsDraw(chart, args, options) {
+      const {ctx} = chart;
+      chart.data.datasets.forEach((dataset, datasetIndex) => {
+        const meta = chart.getDatasetMeta(datasetIndex);
+        meta.data.forEach((element, index) => {
+          const value = dataset.data[index];
+          const position = element.getCenterPoint ? element.getCenterPoint() : {x: element.x, y: element.y};
+          ctx.save();
+          ctx.fillStyle = 'rgba(230,238,248,0.95)';
+          ctx.font = '600 12px system-ui,Segoe UI,Roboto,Arial';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'bottom';
+          ctx.fillText(String(value), position.x, position.y - 10);
+          ctx.restore();
+        });
+      });
+    }
+  };
+  Chart.register(valueLabelPlugin);
 
   _radarChart = new Chart(ctx, {
     type: 'radar',
@@ -36,20 +63,61 @@ function renderRadar(insights) {
       datasets: [{
         label: 'Insight Scores',
         data: values,
-        backgroundColor: 'rgba(99,102,241,0.18)',
-        borderColor: 'rgba(99,102,241,0.9)',
-        pointBackgroundColor: 'rgba(99,102,241,0.9)'
+        fill: true,
+        backgroundColor: gradient,
+        borderColor: 'rgba(99,102,241,0.95)',
+        borderWidth: 3,
+        tension: 0.35,
+        pointRadius: 6,
+        pointHoverRadius: 9,
+        pointBackgroundColor: '#ffffff',
+        pointBorderColor: 'rgba(99,102,241,0.95)',
+        pointBorderWidth: 2,
+        pointStyle: 'circle'
       }]
     },
     options: {
+      maintainAspectRatio: false,
+      elements: {
+        line: {borderJoinStyle: 'round'}
+      },
       scales: {
         r: {
           suggestedMin: 0,
           suggestedMax: 100,
-          ticks: {stepSize: 20}
+          ticks: {
+            stepSize: 20,
+            color: '#9ca3af',
+            backdropColor: 'transparent'
+          },
+          pointLabels: {
+            color: '#cbd5e1',
+            font: {size: 13}
+          },
+          grid: {
+            color: 'rgba(255,255,255,0.03)'
+          },
+          angleLines: {
+            color: 'rgba(255,255,255,0.04)'
+          }
         }
       },
-      plugins: {legend: {display: false}}
+      plugins: {
+        legend: {display: false},
+        tooltip: {
+          enabled: true,
+          backgroundColor: 'rgba(2,6,23,0.95)',
+          titleColor: '#fff',
+          bodyColor: '#fff',
+          callbacks: {
+            label: function(context) {
+              const label = context.dataset.label || '';
+              const v = context.formattedValue || context.raw;
+              return (label ? label + ': ' : '') + v + ' / 100';
+            }
+          }
+        }
+      }
     }
   });
 }
