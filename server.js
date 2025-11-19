@@ -17,6 +17,8 @@ app.use(morgan('dev'));
 
 // API routes
 app.use('/api/ideas', require('./routes/ideas'));
+// Admin routes (guarded endpoints)
+app.use('/api/admin', require('./routes/admin'));
 
 // Basit health-check endpoint
 app.get('/health', (req, res) => {

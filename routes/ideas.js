@@ -1,11 +1,11 @@
 const express = require('express');
 const router = express.Router();
 const Idea = require('../models/Idea');
-const { generateScores, draftLeanCanvas } = require('../lib/insightEngine');
+const insightEngine = require('../lib/insightEngine');
 const { computeDeltas, explainDeltas } = require('../lib/versionUtils');
 
 // Simple in-memory fallback store when MongoDB isn't available (development/demo)
-const inMemory = { ideas: {} };
+const inMemory = require('../lib/inMemoryStore');
 
 function makeId() { return 'mem_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2,8); }
 
@@ -14,8 +14,15 @@ function makeId() { return 'mem_' + Date.now().toString(36) + '_' + Math.random(
 router.post('/', async (req, res) => {
   try {
     const { problem, solution, audience, alternatives, technology } = req.body;
-    const insights = generateScores({ problem, solution, audience, alternatives, technology });
-    const leanCanvas = draftLeanCanvas({ problem, solution, audience, alternatives, technology });
+    const inputs = { problem, solution, audience, alternatives, technology };
+    let insights, leanCanvas;
+    if (process.env.LLM_PROVIDER && process.env.LLM_PROVIDER.toLowerCase() === 'ollama') {
+      insights = await insightEngine.generateScoresLLM(inputs);
+      leanCanvas = await insightEngine.draftLeanCanvasLLM(inputs);
+    } else {
+      insights = insightEngine.generateScores(inputs);
+      leanCanvas = insightEngine.draftLeanCanvas(inputs);
+    }
 
     const idea = new Idea({
       problem,
@@ -81,8 +88,15 @@ router.post('/:id/versions', async (req, res) => {
       const mem = inMemory.ideas[req.params.id];
       if (!mem) return res.status(404).json({ error: 'Not found' });
       const { problem, solution, audience, alternatives, technology } = req.body;
-      const insights = generateScores({ problem, solution, audience, alternatives, technology });
-      const leanCanvas = draftLeanCanvas({ problem, solution, audience, alternatives, technology });
+      const inputs = { problem, solution, audience, alternatives, technology };
+      let insights, leanCanvas;
+      if (process.env.LLM_PROVIDER && process.env.LLM_PROVIDER.toLowerCase() === 'ollama') {
+        insights = await insightEngine.generateScoresLLM(inputs);
+        leanCanvas = await insightEngine.draftLeanCanvasLLM(inputs);
+      } else {
+        insights = insightEngine.generateScores(inputs);
+        leanCanvas = insightEngine.draftLeanCanvas(inputs);
+      }
       const version = { inputs: { problem, solution, audience, alternatives, technology }, insights: { ...insights, leanCanvas }, createdAt: new Date() };
       mem.versions.push(version);
       mem.updatedAt = new Date();
@@ -90,8 +104,15 @@ router.post('/:id/versions', async (req, res) => {
       return res.status(201).json({ ok: true, version });
     }
     const { problem, solution, audience, alternatives, technology } = req.body;
-    const insights = generateScores({ problem, solution, audience, alternatives, technology });
-    const leanCanvas = draftLeanCanvas({ problem, solution, audience, alternatives, technology });
+    const inputs = { problem, solution, audience, alternatives, technology };
+    let insights, leanCanvas;
+    if (process.env.LLM_PROVIDER && process.env.LLM_PROVIDER.toLowerCase() === 'ollama') {
+      insights = await insightEngine.generateScoresLLM(inputs);
+      leanCanvas = await insightEngine.draftLeanCanvasLLM(inputs);
+    } else {
+      insights = insightEngine.generateScores(inputs);
+      leanCanvas = insightEngine.draftLeanCanvas(inputs);
+    }
     const version = { inputs: { problem, solution, audience, alternatives, technology }, insights: { ...insights, leanCanvas }, createdAt: new Date() };
     idea.versions.push(version);
     idea.problem = problem; idea.solution = solution; idea.audience = audience; idea.alternatives = alternatives; idea.technology = technology;
@@ -138,7 +159,9 @@ router.get('/:id/compare', async (req, res) => {
     const first = versions[0].insights || {};
     const latest = versions[versions.length - 1].insights || {};
     const deltas = computeDeltas(first, latest);
-    const explanation = explainDeltas(deltas);
+    const firstInputs = (versions[0] && versions[0].inputs) ? versions[0].inputs : {};
+    const latestInputs = (versions[versions.length - 1] && versions[versions.length - 1].inputs) ? versions[versions.length - 1].inputs : {};
+    const explanation = await explainDeltas(deltas, firstInputs, latestInputs);
     return res.json({ deltas, explanation, first, latest });
   } catch (err) {
     console.error('Error comparing versions', err);
@@ -147,7 +170,7 @@ router.get('/:id/compare', async (req, res) => {
 });
 
 // GET /api/ideas/demo
-router.get('/demo/list', (req, res) => {
+router.get('/demo/list', async (req, res) => {
   try {
     const samples = [
       {
@@ -172,9 +195,31 @@ router.get('/demo/list', (req, res) => {
         technology: 'saas, node, react'
       }
     ];
+
+    const useLLM = process.env.LLM_PROVIDER && process.env.LLM_PROVIDER.toLowerCase() === 'ollama';
+
+    if (useLLM) {
+      // Use LLM-backed generation for each sample, but fall back gracefully to heuristics on errors
+      const results = await Promise.all(samples.map(async (s) => {
+        try {
+          const insights = await insightEngine.generateScoresLLM(s);
+          const leanCanvas = await insightEngine.draftLeanCanvasLLM(s);
+          return { ...s, createdAt: new Date(), insights: { ...insights, leanCanvas }, _id: null, saved: false };
+        } catch (e) {
+          // LLM failed for this sample — fallback to deterministic heuristics
+          console.error('LLM scoring failed for demo sample, falling back:', e && e.message ? e.message : e);
+          const insights = insightEngine.generateScores(s);
+          const leanCanvas = insightEngine.draftLeanCanvas(s);
+          return { ...s, createdAt: new Date(), insights: { ...insights, leanCanvas }, _id: null, saved: false };
+        }
+      }));
+      return res.json(results);
+    }
+
+    // Default deterministic path
     const results = samples.map((s) => {
-      const insights = generateScores(s);
-      const leanCanvas = draftLeanCanvas(s);
+      const insights = insightEngine.generateScores(s);
+      const leanCanvas = insightEngine.draftLeanCanvas(s);
       return { ...s, createdAt: new Date(), insights: { ...insights, leanCanvas }, _id: null, saved: false };
     });
     res.json(results);
@@ -185,7 +230,11 @@ router.get('/demo/list', (req, res) => {
 });
 
 // POST /api/ideas/demo/populate -> create one idea + several revisions for demo
+// Guarded by `DEMO_POPULATE_ALLOWED=true` to avoid accidental population on start
 router.post('/demo/populate', async (req, res) => {
+  if (!process.env.DEMO_POPULATE_ALLOWED || process.env.DEMO_POPULATE_ALLOWED !== 'true') {
+    return res.status(403).json({ error: 'Demo populate disabled. Use scripts/seed_from_file.js to seed demo data.' });
+  }
   try {
     // base idea
     const base = {
@@ -195,8 +244,14 @@ router.post('/demo/populate', async (req, res) => {
       alternatives: 'manual onboarding, help docs',
       technology: 'web, analytics'
     };
-    const insights = generateScores(base);
-    const leanCanvas = draftLeanCanvas(base);
+    let insights, leanCanvas;
+    if (process.env.LLM_PROVIDER && process.env.LLM_PROVIDER.toLowerCase() === 'ollama') {
+      insights = await insightEngine.generateScoresLLM(base);
+      leanCanvas = await insightEngine.draftLeanCanvasLLM(base);
+    } else {
+      insights = insightEngine.generateScores(base);
+      leanCanvas = insightEngine.draftLeanCanvas(base);
+    }
     const idea = new Idea({
       problem: base.problem,
       solution: base.solution,
@@ -216,8 +271,14 @@ router.post('/demo/populate', async (req, res) => {
       ];
       for (const r of revs) {
         const inputs = { problem: base.problem, solution: r.solution, audience: base.audience, alternatives: base.alternatives, technology: r.technology };
-        const ins = generateScores(inputs);
-        const lc = draftLeanCanvas(inputs);
+        let ins, lc;
+        if (process.env.LLM_PROVIDER && process.env.LLM_PROVIDER.toLowerCase() === 'ollama') {
+          ins = await insightEngine.generateScoresLLM(inputs);
+          lc = await insightEngine.draftLeanCanvasLLM(inputs);
+        } else {
+          ins = insightEngine.generateScores(inputs);
+          lc = insightEngine.draftLeanCanvas(inputs);
+        }
         saved.versions.push({ inputs, insights: { ...ins, leanCanvas: lc }, createdAt: new Date() });
       }
       await saved.save();
@@ -227,7 +288,9 @@ router.post('/demo/populate', async (req, res) => {
         const first = versions[0] && versions[0].insights ? versions[0].insights : {};
         const latest = versions[versions.length - 1] && versions[versions.length - 1].insights ? versions[versions.length - 1].insights : {};
         const deltas = computeDeltas(first, latest);
-        const explanation = explainDeltas(deltas);
+        const firstInputs = (versions[0] && versions[0].inputs) ? versions[0].inputs : {};
+        const latestInputs = (versions[versions.length - 1] && versions[versions.length - 1].inputs) ? versions[versions.length - 1].inputs : {};
+        const explanation = await explainDeltas(deltas, firstInputs, latestInputs);
         return res.json({ ok: true, id: saved._id, compare: { deltas, explanation, first, latest } });
       } catch (err) {
         return res.json({ ok: true, id: saved._id });
@@ -253,8 +316,14 @@ router.post('/demo/populate', async (req, res) => {
       ];
       for (const r of revs) {
         const inputs = { problem: base.problem, solution: r.solution, audience: base.audience, alternatives: base.alternatives, technology: r.technology };
-        const ins = generateScores(inputs);
-        const lc = draftLeanCanvas(inputs);
+        let ins, lc;
+        if (process.env.LLM_PROVIDER && process.env.LLM_PROVIDER.toLowerCase() === 'ollama') {
+          ins = await insightEngine.generateScoresLLM(inputs);
+          lc = await insightEngine.draftLeanCanvasLLM(inputs);
+        } else {
+          ins = insightEngine.generateScores(inputs);
+          lc = insightEngine.draftLeanCanvas(inputs);
+        }
         stored.versions.push({ inputs, insights: { ...ins, leanCanvas: lc }, createdAt: new Date() });
       }
       inMemory.ideas[id] = stored;
@@ -263,7 +332,9 @@ router.post('/demo/populate', async (req, res) => {
         const first = versions[0] && versions[0].insights ? versions[0].insights : {};
         const latest = versions[versions.length - 1] && versions[versions.length - 1].insights ? versions[versions.length - 1].insights : {};
         const deltas = computeDeltas(first, latest);
-        const explanation = explainDeltas(deltas);
+        const firstInputs = (versions[0] && versions[0].inputs) ? versions[0].inputs : {};
+        const latestInputs = (versions[versions.length - 1] && versions[versions.length - 1].inputs) ? versions[versions.length - 1].inputs : {};
+        const explanation = await explainDeltas(deltas, firstInputs, latestInputs);
         return res.json({ ok: true, id, compare: { deltas, explanation, first, latest } });
       } catch (err) {
         return res.json({ ok: true, id });

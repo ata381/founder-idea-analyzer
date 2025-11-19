@@ -88,6 +88,15 @@ document.addEventListener('DOMContentLoaded', () => {
       const list = await r.json();
       if (Array.isArray(list) && list.length) {
         demoList = list;
+        // If any sample had an LLM warning, surface it to the demo note
+        const warnings = [];
+        demoList.forEach((d) => {
+          if (d && d.insights && d.insights.llmWarning) warnings.push(d.insights.llmWarning);
+          if (d && d.insights && d.insights.leanCanvas && d.insights.leanCanvas.llmWarning) warnings.push(d.insights.leanCanvas.llmWarning);
+        });
+        if (warnings.length) {
+          demoNote.textContent = `LLM warning: ${warnings[0]}`;
+        }
         renderDemo(0);
       } else {
         demoNote.textContent = 'No demo samples available.';
@@ -127,6 +136,11 @@ document.addEventListener('DOMContentLoaded', () => {
       }
       // update Mentor Dashboard from the returned insights
       updateMentorFromInsights(json.insights);
+      // surface any LLM warning from the insights or lean canvas
+      if (json && json.insights) {
+        const w = json.insights.llmWarning || (json.insights.leanCanvas && json.insights.leanCanvas.llmWarning);
+        if (w && demoNote) demoNote.textContent = `LLM warning: ${w}`;
+      }
     } catch (err) {
       output.textContent = 'Error: ' + err.message;
     }
