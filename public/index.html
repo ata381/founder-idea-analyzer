@@ -16,15 +16,9 @@
       <div class="page-wrap">
         <div class="card">
           <h1>Founder Idea Analyzer</h1>
-          <p>Submit an idea to generate heuristic insights (Iteration 1 demo).</p>
+          <p>Submit an idea to generate LLM-backed insights (Iteration 1 demo).</p>
 
-          <div class="controls">
-            <div>
-              <button id="prev-demo" type="button" class="secondary">◀ Prev demo</button>
-              <button id="next-demo" type="button" class="secondary">Next demo ▶</button>
-            </div>
-            <div id="demo-note" class="demo-note">Loading demo result...</div>
-          </div>
+          <div id="status-banner" class="status-banner" data-tone="muted">Ready for your idea.</div>
 
           <form id="idea-form">
             <label>Problem (describe the core pain or need)<br><textarea id="problem" rows="3" placeholder="Describe the problem your users face" style="width:100%"></textarea></label>
@@ -36,14 +30,13 @@
           </form>
 
           <h3>Insight Output</h3>
-          <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-start;">
-            <div style="flex:1;min-width:280px;">
-              <canvas id="radar-chart" style="background:#0b1120;border-radius:8px;padding:8px;max-height:320px;width:100%"></canvas>
+          <div class="insight-pane">
+            <div class="insight-pane__section insight-pane__chart">
+              <canvas id="radar-chart"></canvas>
             </div>
-            <div style="flex:1;min-width:280px;">
-              <div id="insight-output" style="background:#020617;padding:12px;border-radius:8px;max-height:160px;overflow:auto;color:#e6eef8;font-family:monospace">No result yet.</div>
-            </div>
+            <div class="insight-pane__section insight-pane__scores" id="insight-score-cards"></div>
           </div>
+          <div class="insight-pane__text" id="insight-output">No result yet.</div>
 
           <h3 style="margin-top:18px">Lean Canvas (draft)</h3>
           <div id="canvas-grid" style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:8px"></div>
@@ -61,7 +54,6 @@
               <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
                 <button id="save-revision" class="secondary">Save revision</button>
                 <button id="compare-versions">Compare first ↔ latest</button>
-                <button id="populate-demo" class="secondary">Populate demo revisions</button>
               </div>
               <div id="comparison-output" style="background:#020617;padding:12px;border-radius:8px;max-height:220px;overflow:auto;color:#e6eef8;font-family:system-ui">No comparison run yet.</div>
             </div>

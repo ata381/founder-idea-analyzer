@@ -1,4 +1,8 @@
 require('dotenv').config();
+
+// Ensure LLM defaults are always present so the stronger Ollama model is used without manual exports.
+process.env.LLM_PROVIDER = process.env.LLM_PROVIDER || 'ollama';
+process.env.OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'llama3.1:8b';
 const path = require('path');
 const express = require('express');
 const morgan = require('morgan');

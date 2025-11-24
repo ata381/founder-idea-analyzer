@@ -4,7 +4,17 @@ async function postIdea(data) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data)
   });
-  return res.json();
+  let body = null;
+  try {
+    body = await res.json();
+  } catch (_) {
+    body = null;
+  }
+  if (!res.ok) {
+    const msg = (body && body.error) ? body.error : res.statusText || 'Failed to analyze idea';
+    throw new Error(msg);
+  }
+  return body;
 }
 
 function el(id) { return document.getElementById(id); }
@@ -12,20 +22,23 @@ function el(id) { return document.getElementById(id); }
 document.addEventListener('DOMContentLoaded', () => {
   const form = el('idea-form');
   const output = el('insight-output');
-  const canvasOut = el('canvas-output');
+  const canvasGrid = el('canvas-grid');
   const saveRevisionBtn = el('save-revision');
   const compareBtn = el('compare-versions');
-  const populateDemoBtn = el('populate-demo');
   const comparisonOutput = el('comparison-output');
   const awarenessDeltaText = el('awareness-delta-text');
   const blindSpotsList = el('blind-spots-list');
   const weeklySummaryText = el('weekly-summary-text');
-  const demoNote = el('demo-note');
-  const prevBtn = el('prev-demo');
-  const nextBtn = el('next-demo');
-  let demoList = [];
-  let demoIndex = 0;
+  const statusBanner = el('status-banner');
   let currentIdeaId = null;
+
+  function setStatus(message, tone = 'muted') {
+    if (!statusBanner) return;
+    statusBanner.textContent = message;
+    statusBanner.dataset.tone = tone;
+  }
+
+  setStatus('Ready for your idea.');
 
   function updateMentorFromInsights(insights) {
     if (!insights) {
@@ -53,7 +66,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const blind = keys.filter((k,i)=>vals[i] < 40).map(k=>labels[k]);
     if (blindSpotsList) blindSpotsList.textContent = blind.length ? blind.join(', ') : 'None detected';
 
-    // weekly summary: quick heuristics
+    // weekly summary: quick qualitative summary
     const strong = keys.filter((k,i)=>vals[i] >= 65).map(k=>labels[k]);
     const weak = keys.filter((k,i)=>vals[i] < 40).map(k=>labels[k]);
     let summary = '';
@@ -63,48 +76,6 @@ document.addEventListener('DOMContentLoaded', () => {
     if (weeklySummaryText) weeklySummaryText.textContent = summary;
   }
 
-  function renderDemo(idx) {
-    if (!Array.isArray(demoList) || demoList.length === 0) return;
-    demoIndex = (idx + demoList.length) % demoList.length;
-    const demo = demoList[demoIndex];
-    renderInsights(demo.insights, output);
-    if (window.renderRadar) renderRadar(demo.insights);
-    if (window.renderLeanCanvasGrid && demo.insights && demo.insights.leanCanvas) {
-      renderLeanCanvasGrid(demo.insights.leanCanvas);
-    }
-    // Update mentor dashboard from this single demo snapshot
-    updateMentorFromInsights(demo.insights);
-    demoNote.textContent = `Demo ${demoIndex + 1} of ${demoList.length} — use Prev/Next to cycle.`;
-  }
-
-  if (prevBtn) prevBtn.addEventListener('click', () => renderDemo(demoIndex - 1));
-  if (nextBtn) nextBtn.addEventListener('click', () => renderDemo(demoIndex + 1));
-
-  // Load demo result on page load
-  (async function loadDemo(){
-    try {
-      const r = await fetch('/api/ideas/demo/list');
-      if (!r.ok) { demoNote.textContent = 'Demo unavailable.'; return; }
-      const list = await r.json();
-      if (Array.isArray(list) && list.length) {
-        demoList = list;
-        // If any sample had an LLM warning, surface it to the demo note
-        const warnings = [];
-        demoList.forEach((d) => {
-          if (d && d.insights && d.insights.llmWarning) warnings.push(d.insights.llmWarning);
-          if (d && d.insights && d.insights.leanCanvas && d.insights.leanCanvas.llmWarning) warnings.push(d.insights.leanCanvas.llmWarning);
-        });
-        if (warnings.length) {
-          demoNote.textContent = `LLM warning: ${warnings[0]}`;
-        }
-        renderDemo(0);
-      } else {
-        demoNote.textContent = 'No demo samples available.';
-      }
-    } catch (err) {
-      demoNote.textContent = 'Demo load failed (server may be offline).';
-    }
-  })();
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     const data = {
@@ -115,7 +86,8 @@ document.addEventListener('DOMContentLoaded', () => {
       technology: el('technology').value
     };
     output.textContent = 'Analyzing…';
-    canvasOut.textContent = '';
+    setStatus('Analyzing idea…');
+    if (canvasGrid) canvasGrid.innerHTML = '';
     try {
       const json = await postIdea(data);
       // show the insights
@@ -129,20 +101,29 @@ document.addEventListener('DOMContentLoaded', () => {
       // render the lean canvas grid
       if (window.renderLeanCanvasGrid && json.insights && json.insights.leanCanvas) {
         renderLeanCanvasGrid(json.insights.leanCanvas);
-      } else if (json.insights && json.insights.leanCanvas) {
-        canvasOut.textContent = Object.entries(json.insights.leanCanvas).map(([k,v]) => `${k}: ${v}`).join('\n\n');
-      } else {
-        canvasOut.textContent = 'No canvas returned.';
+      } else if (canvasGrid) {
+        if (json.insights && json.insights.leanCanvas) {
+          canvasGrid.innerHTML = `<pre style="white-space:pre-wrap;font-size:0.9rem;color:#cbd5e1;background:#030712;border-radius:8px;padding:12px;margin:0">${escapeHtml(JSON.stringify(json.insights.leanCanvas, null, 2))}</pre>`;
+        } else {
+          canvasGrid.innerHTML = '<div style="color:#94a3b8">No canvas returned.</div>';
+        }
       }
       // update Mentor Dashboard from the returned insights
       updateMentorFromInsights(json.insights);
       // surface any LLM warning from the insights or lean canvas
+      let tone = 'success';
+      let message = 'Analysis complete. Save a revision to track improvements.';
       if (json && json.insights) {
         const w = json.insights.llmWarning || (json.insights.leanCanvas && json.insights.leanCanvas.llmWarning);
-        if (w && demoNote) demoNote.textContent = `LLM warning: ${w}`;
+        if (w) {
+          tone = 'warning';
+          message = `LLM warning: ${w}`;
+        }
       }
+      setStatus(message, tone);
     } catch (err) {
       output.textContent = 'Error: ' + err.message;
+      setStatus(`Analysis failed: ${err.message}`, 'error');
     }
   });
 
@@ -172,10 +153,10 @@ document.addEventListener('DOMContentLoaded', () => {
   // Compare first vs latest (extracted function so other actions can call it)
   async function runCompare() {
     if (!currentIdeaId) { alert('No saved idea to compare.'); return; }
-    comparisonOutput.textContent = 'Computing comparison…';
+    if (comparisonOutput) comparisonOutput.textContent = 'Computing comparison…';
     try {
       const r = await fetch(`/api/ideas/${currentIdeaId}/compare`);
-      if (!r.ok) { comparisonOutput.textContent = 'Comparison failed'; return; }
+      if (!r.ok) { if (comparisonOutput) comparisonOutput.textContent = 'Comparison failed'; return; }
       const payload = await r.json();
       // build detailed comparison UI
       const deltas = payload.deltas || {};
@@ -202,12 +183,12 @@ document.addEventListener('DOMContentLoaded', () => {
       });
 
       html += '</tbody></table></div></div>';
-      comparisonOutput.innerHTML = html;
+      if (comparisonOutput) comparisonOutput.innerHTML = html;
 
       // awareness delta: show average change magnitude
       const keys = Object.keys(deltas);
       const avgDelta = Math.round(keys.reduce((s,k)=>s+Math.abs(deltas[k].delta),0)/Math.max(1,keys.length));
-      awarenessDeltaText.textContent = (avgDelta >= 0) ? `${avgDelta} pts (avg change)` : '0';
+      if (awarenessDeltaText) awarenessDeltaText.textContent = (avgDelta >= 0) ? `${avgDelta} pts (avg change)` : '0';
 
       // blind spots: list metrics below 40 in latest
       const latest = payload.latest || {};
@@ -215,75 +196,16 @@ document.addEventListener('DOMContentLoaded', () => {
       ['problemValidationScore','marketMaturity','competitionDensity','differentiationPotential','technicalFeasibility','riskAndUncertainty'].forEach(k=>{
         if ((latest[k]||0) < 40) blind.push(labels[k] || k);
       });
-      blindSpotsList.textContent = blind.length ? blind.join(', ') : 'None detected';
+      if (blindSpotsList) blindSpotsList.textContent = blind.length ? blind.join(', ') : 'None detected';
 
       // weekly summary: simple textual summary
-      weeklySummaryText.textContent = payload.explanation;
+      if (weeklySummaryText) weeklySummaryText.textContent = payload.explanation;
     } catch (err) {
-      comparisonOutput.textContent = 'Error: ' + err.message;
+      if (comparisonOutput) comparisonOutput.textContent = 'Error: ' + err.message;
     }
   }
 
   if (compareBtn) compareBtn.addEventListener('click', runCompare);
-
-  if (populateDemoBtn) populateDemoBtn.addEventListener('click', async () => {
-    try {
-      comparisonOutput.textContent = 'Populating demo revisions…';
-      const r = await fetch('/api/ideas/demo/populate', { method: 'POST' });
-      if (!r.ok) { comparisonOutput.textContent = 'Demo populate failed'; return; }
-      const j = await r.json();
-      if (j && j.id) {
-        currentIdeaId = j.id;
-        if (j.compare) {
-          // render the provided compare payload immediately
-          const payload = j.compare;
-          // reuse runCompare's rendering logic by creating a small helper
-          // We'll inline similar rendering here to avoid async fetch
-          const deltas = payload.deltas || {};
-          const order = ['problemValidationScore','marketMaturity','competitionDensity','differentiationPotential','technicalFeasibility','riskAndUncertainty'];
-          const labels = {
-            problemValidationScore: 'Problem validation',
-            marketMaturity: 'Market maturity',
-            competitionDensity: 'Competition density',
-            differentiationPotential: 'Differentiation',
-            technicalFeasibility: 'Technical feasibility',
-            riskAndUncertainty: 'Risk / Uncertainty'
-          };
-          let html = '<div style="display:flex;flex-direction:column;gap:8px">';
-          html += `<div style="color:#cbd5e1">${payload.explanation}</div>`;
-          html += '<div style="overflow:auto;margin-top:8px"><table style="width:100%;border-collapse:collapse;font-family:system-ui"><thead><tr style="text-align:left;color:#9ca3af"><th style="padding:6px 8px">Metric</th><th style="padding:6px 8px">From</th><th style="padding:6px 8px">To</th><th style="padding:6px 8px">Δ</th></tr></thead><tbody>';
-          order.forEach(k => {
-            const d = deltas[k] || { from: 0, to: 0, delta: 0 };
-            const delta = d.delta || 0;
-            const arrow = delta > 0 ? '▲' : (delta < 0 ? '▼' : '');
-            const color = delta > 0 ? '#86efac' : (delta < 0 ? '#fca5a5' : '#cbd5e1');
-            html += `<tr><td style="padding:6px 8px;color:#e6eef8">${labels[k]}</td><td style="padding:6px 8px;color:#9ca3af">${d.from}</td><td style="padding:6px 8px;color:#9ca3af">${d.to}</td><td style="padding:6px 8px;color:${color};font-weight:600">${arrow} ${delta}</td></tr>`;
-          });
-          html += '</tbody></table></div></div>';
-          comparisonOutput.innerHTML = html;
-          // update other mentor cards
-          const keys = Object.keys(deltas);
-          const avgDelta = Math.round(keys.reduce((s,k)=>s+Math.abs(deltas[k].delta),0)/Math.max(1,keys.length));
-          awarenessDeltaText.textContent = (avgDelta >= 0) ? `${avgDelta} pts (avg change)` : '0';
-          const latest = payload.latest || {};
-          const blind = [];
-          ['problemValidationScore','marketMaturity','competitionDensity','differentiationPotential','technicalFeasibility','riskAndUncertainty'].forEach(k=>{
-            if ((latest[k]||0) < 40) blind.push(labels[k] || k);
-          });
-          blindSpotsList.textContent = blind.length ? blind.join(', ') : 'None detected';
-          weeklySummaryText.textContent = payload.explanation;
-        } else {
-          comparisonOutput.textContent = 'Demo created — running comparison…';
-          await runCompare();
-        }
-      } else {
-        comparisonOutput.textContent = 'Demo populate did not return an id';
-      }
-    } catch (err) {
-      comparisonOutput.textContent = 'Error populating demo: ' + err.message;
-      console.error('Demo populate error', err);
-    }
-  });
 });
 
 function escapeHtml(s) {
@@ -294,42 +216,83 @@ function nl2br(s) {
   return escapeHtml(s).replace(/\n/g, '<br>');
 }
 
-function renderInsights(insights, container) {
-  if (!insights) { container.innerHTML = '<div>No insights</div>'; return; }
+function formatInsightValue(value) {
+  if (value == null) return '—';
+  if (Array.isArray(value)) {
+    return value.map((item) => formatInsightValue(item)).join(', ');
+  }
+  if (typeof value === 'object') {
+    const entries = Object.entries(value);
+    if (!entries.length) return '—';
+    return entries.map(([key, val]) => `${escapeHtml(key)}: ${formatInsightValue(val)}`).join('<br>');
+  }
+  return escapeHtml(String(value));
+}
+
+function renderScoreCards(insights) {
+  const container = document.getElementById('insight-score-cards');
+  if (!container) return;
+
+  if (!insights) {
+    container.innerHTML = '<div class="insight-score-card"><div class="insight-score-card__label">Insights</div><div class="insight-score-card__value">—</div></div>';
+    return;
+  }
+
   const scores = [
-    ['Problem validation', insights.problemValidationScore],
-    ['Market maturity', insights.marketMaturity],
-    ['Competition density', insights.competitionDensity],
-    ['Differentiation', insights.differentiationPotential],
-    ['Technical feasibility', insights.technicalFeasibility],
-    ['Risk / Uncertainty', insights.riskAndUncertainty]
+    { key: 'problemValidationScore', label: 'Problem validation' },
+    { key: 'marketMaturity', label: 'Market maturity' },
+    { key: 'competitionDensity', label: 'Competition density' },
+    { key: 'differentiationPotential', label: 'Differentiation' },
+    { key: 'technicalFeasibility', label: 'Technical feasibility' },
+    { key: 'riskAndUncertainty', label: 'Risk / Uncertainty' }
   ];
 
+  container.innerHTML = scores.map(({ key, label }) => {
+    const value = (typeof insights[key] === 'number') ? insights[key] : 0;
+    return `
+      <div class="insight-score-card">
+        <div class="insight-score-card__label">${label}</div>
+        <div class="insight-score-card__value"><span>${value}</span><span style="font-size:0.85rem;color:#94a3b8">/ 100</span></div>
+        <div class="insight-score-card__bar"><div class="insight-score-card__bar-fill" style="width:${value}%"></div></div>
+      </div>
+    `;
+  }).join('');
+}
+
+function renderInsights(insights, container) {
+  renderScoreCards(insights);
+  if (!insights) {
+    container.innerHTML = '<div>No insights</div>';
+    return;
+  }
+
   const lc = insights.leanCanvas || {};
-  const suggested = lc.SuggestedSolution || null;
-  const solution = lc.Solution || null;
+  const sections = [];
 
-  let html = '';
-  html += '<div style="display:flex;flex-direction:column;gap:8px">';
-  scores.forEach(([label, val]) => {
-    const v = (typeof val === 'number') ? val : 0;
-    html += `<div style="display:flex;align-items:center;gap:8px"><div style="width:160px;color:#cbd5e1;font-size:0.9rem">${label}</div><div style="flex:1;background:#071028;border-radius:6px;height:12px;overflow:hidden"><div style="height:100%;width:${v}%;background:linear-gradient(90deg,#6366f1,#06b6d4);"></div></div><div style="width:40px;text-align:right;color:#93c5fd;font-size:0.9rem">${v}</div></div>`;
-  });
+  const pushSection = (title, body) => {
+    if (!body) return;
+    sections.push(`<h4>${escapeHtml(title)}</h4><p>${formatInsightValue(body)}</p>`);
+  };
 
-  if (suggested && suggested === solution) {
-    html += `<div style="margin-top:8px;color:#e6eef8"><strong>Suggested solution</strong><div style="margin-top:6px;color:#cbd5e1">${nl2br(suggested)}</div></div>`;
-  } else if (solution && suggested) {
-    html += `<div style="margin-top:8px;color:#e6eef8"><strong>Provided solution</strong><div style="margin-top:6px;color:#cbd5e1">${nl2br(solution)}</div></div>`;
-    html += `<div style="margin-top:8px;color:#e6eef8"><strong>Suggested solution</strong><div style="margin-top:6px;color:#cbd5e1">${nl2br(suggested)}</div></div>`;
-  } else if (solution) {
-    html += `<div style="margin-top:8px;color:#e6eef8"><strong>Solution</strong><div style="margin-top:6px;color:#cbd5e1">${nl2br(solution)}</div></div>`;
+  if (lc.Solution && lc.SuggestedSolution && lc.Solution !== lc.SuggestedSolution) {
+    pushSection('Provided solution', lc.Solution);
+    pushSection('Suggested solution', lc.SuggestedSolution);
+  } else if (lc.Solution || lc.SuggestedSolution) {
+    pushSection('Solution', lc.Solution || lc.SuggestedSolution);
   }
 
-  if (lc.UniqueValueProposition) {
-    html += `<div style="margin-top:8px;color:#e6eef8"><strong>Unique value proposition</strong><div style="margin-top:6px;color:#cbd5e1">${nl2br(lc.UniqueValueProposition)}</div></div>`;
+  pushSection('Unique value proposition', lc.UniqueValueProposition);
+  pushSection('Customer segments', lc.CustomerSegments);
+  pushSection('Channels', lc.Channels);
+  pushSection('Revenue model', lc.RevenueModel);
+  pushSection('Key metrics', lc.KeyMetrics);
+  pushSection('Advantage', lc.Advantage);
+
+  if (!sections.length) {
+    container.innerHTML = '<div>No narrative insights generated.</div>';
+    return;
   }
 
-  html += '</div>';
-  container.innerHTML = html;
+  container.innerHTML = sections.join('');
 }
 

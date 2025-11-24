@@ -138,13 +138,26 @@ function renderLeanCanvasGrid(lc) {
     box.style.padding = '10px';
     box.style.borderRadius = '8px';
     box.style.minHeight = '80px';
-    box.innerHTML = `<strong>${key.replace(/([A-Z])/g, ' $1').trim()}</strong><div style="margin-top:6px;font-size:0.95rem;color:#cbd5e1">${(lc && lc[key]) ? escapeHtml(String(lc[key])) : '—'}</div>`;
+    box.innerHTML = `<strong>${key.replace(/([A-Z])/g, ' $1').trim()}</strong><div style="margin-top:6px;font-size:0.95rem;color:#cbd5e1">${formatCanvasValue(lc && lc[key])}</div>`;
     grid.appendChild(box);
   });
 }
 
 function escapeHtml(s) {
   return s.replace(/[&<>"]/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+}
+
+function formatCanvasValue(value) {
+  if (value == null) return '—';
+  if (Array.isArray(value)) {
+    return value.map((item) => formatCanvasValue(item)).join(', ');
+  }
+  if (typeof value === 'object') {
+    const entries = Object.entries(value);
+    if (!entries.length) return '—';
+    return entries.map(([k, v]) => `${escapeHtml(k)}: ${formatCanvasValue(v)}`).join('<br>');
+  }
+  return escapeHtml(String(value));
 }
 
 window.renderRadar = renderRadar;

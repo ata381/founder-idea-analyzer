@@ -5,7 +5,7 @@ This file documents the prompt templates used by the app when `LLM_PROVIDER=olla
 Environment flags
 - `LLM_PROVIDER=ollama` — enable calling the local Ollama HTTP API.
 - `OLLAMA_HOST` — base URL for Ollama (default `http://127.0.0.1:11434`).
-- `OLLAMA_MODEL` — model name to request from Ollama (default `llama2`).
+- `OLLAMA_MODEL` — model name to request from Ollama (default `llama3.1:8b`).
 
 Files that use these prompts
 - `lib/insightEngine.js` — prompts for generating numerical scores and drafting a Lean Canvas.
@@ -26,7 +26,7 @@ Template (conceptual):
 You are a concise analyst. Input:
 <JSON of inputs>
 
-Produce JSON only with these keys and numeric 0-100 values:
+Produce JSON only with these keys and numeric 0-100 values (keep the entire response under ~120 characters):
 problemValidationScore, marketMaturity, competitionDensity, differentiationPotential, technicalFeasibility, riskAndUncertainty
 
 Example output:
@@ -46,7 +46,7 @@ Template (conceptual):
 You are an assistant that drafts a lean canvas. Input:
 <JSON of inputs>
 
-Respond with JSON only. Fields to include: Problem, Solution, SuggestedSolution, UniqueValueProposition, CustomerSegments, Channels, RevenueModel, CostStructure, KeyMetrics, Advantage
+Respond with JSON only. Fields to include: Problem, Solution, SuggestedSolution, UniqueValueProposition, CustomerSegments, Channels, RevenueModel, CostStructure, KeyMetrics, Advantage. Keep each field under ~40 words.
 ```
 
 Tuning tips:
@@ -78,7 +78,6 @@ Tuning tips:
 - Keep the response length bounded to avoid overly long results (e.g., `Keep the response under 200 words`).
 
 Operational considerations
-- Fallbacks: the code falls back to deterministic heuristics if the Ollama call errors or returns unparsable output. That makes the API robust but means you should monitor server logs to catch LLM parsing issues.
 - Prompt iteration: update these templates in `lib/insightEngine.js` and `lib/versionUtils.js` to quickly iterate on model behavior. If you prefer, we can externalize prompts into `prompts/*.json` and load them at runtime.
 - Rate and latency: calling LLMs introduces latency. Consider caching repeated calls for the same inputs or issuing LLM requests asynchronously where possible.
 
