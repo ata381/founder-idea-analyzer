@@ -126,19 +126,25 @@ function renderLeanCanvasGrid(lc) {
   const grid = document.getElementById('canvas-grid');
   grid.innerHTML = '';
   const order = [
-    'Problem', 'Solution', 'UniqueValueProposition',
-    'CustomerSegments', 'Channels', 'RevenueModel',
-    'CostStructure', 'KeyMetrics', 'Advantage'
+    'Problem',
+    'Solution',
+    'SuggestedSolution',
+    'UniqueValueProposition',
+    'CustomerSegments',
+    'Channels',
+    'RevenueModel',
+    'CostStructure',
+    'KeyMetrics',
+    'Advantage'
   ];
 
   order.forEach((key) => {
     const box = document.createElement('div');
-    box.style.background = '#071028';
-    box.style.border = '1px solid #112';
-    box.style.padding = '10px';
-    box.style.borderRadius = '8px';
-    box.style.minHeight = '80px';
-    box.innerHTML = `<strong>${key.replace(/([A-Z])/g, ' $1').trim()}</strong><div style="margin-top:6px;font-size:0.95rem;color:#cbd5e1">${formatCanvasValue(lc && lc[key])}</div>`;
+    box.className = 'lean-canvas-card';
+    const title = key === 'SuggestedSolution'
+      ? 'Suggested solution'
+      : key.replace(/([A-Z])/g, ' $1').trim();
+    box.innerHTML = `<h4>${escapeHtml(title)}</h4><p>${formatCanvasValue(lc && lc[key])}</p>`;
     grid.appendChild(box);
   });
 }

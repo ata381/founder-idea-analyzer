@@ -30,6 +30,12 @@ document.addEventListener('DOMContentLoaded', () => {
   const blindSpotsList = el('blind-spots-list');
   const weeklySummaryText = el('weekly-summary-text');
   const statusBanner = el('status-banner');
+  const statusBadge = el('status-badge');
+  const statusBadgeText = el('status-badge') ? el('status-badge').querySelector('.status-badge__text') : null;
+  const solutionSummary = el('solution-summary');
+  const solutionSummaryLabel = el('solution-summary-label');
+  const solutionSummaryBadge = el('solution-summary-badge');
+  const solutionSummaryText = el('solution-summary-text');
   let currentIdeaId = null;
 
   function setStatus(message, tone = 'muted') {
@@ -38,7 +44,31 @@ document.addEventListener('DOMContentLoaded', () => {
     statusBanner.dataset.tone = tone;
   }
 
+  function setOnlineStatus(isOnline) {
+    if (!statusBadge || !statusBadgeText) return;
+    statusBadge.classList.remove('status-badge--online', 'status-badge--offline');
+    if (isOnline) {
+      statusBadge.classList.add('status-badge--online');
+      statusBadgeText.textContent = 'Online';
+      if (statusBanner) statusBanner.dataset.tone = 'success';
+    } else {
+      statusBadge.classList.add('status-badge--offline');
+      statusBadgeText.textContent = 'Offline';
+      if (statusBanner) statusBanner.dataset.tone = 'error';
+    }
+  }
+
+  async function checkHealth() {
+    try {
+      const res = await fetch('/health');
+      setOnlineStatus(res.ok);
+    } catch (_) {
+      setOnlineStatus(false);
+    }
+  }
+
   setStatus('Ready for your idea.');
+  checkHealth();
 
   function updateMentorFromInsights(insights) {
     if (!insights) {
@@ -87,11 +117,39 @@ document.addEventListener('DOMContentLoaded', () => {
     };
     output.textContent = 'Analyzing…';
     setStatus('Analyzing idea…');
+    if (solutionSummary) {
+      solutionSummary.style.display = 'none';
+    }
     if (canvasGrid) canvasGrid.innerHTML = '';
     try {
       const json = await postIdea(data);
       // show the insights
       renderInsights(json.insights, output);
+      // update compact solution summary near the form
+      if (solutionSummary && json && json.insights && json.insights.leanCanvas) {
+        const lc = json.insights.leanCanvas;
+        const userProvidedSolution = (data.solution || '').trim().length > 0;
+        const provided = lc.Solution || null;
+        const suggested = lc.SuggestedSolution || null;
+        const body = suggested || provided || null;
+
+        if (body) {
+          solutionSummary.style.display = 'block';
+          if (userProvidedSolution && suggested) {
+            solutionSummaryLabel.textContent = 'Mentor critique of your solution';
+            solutionSummaryBadge.textContent = 'Brutally honest take';
+          } else if (!userProvidedSolution && suggested) {
+            solutionSummaryLabel.textContent = 'Suggested solution from mentor';
+            solutionSummaryBadge.textContent = 'You left solution blank';
+          } else {
+            solutionSummaryLabel.textContent = 'Restated solution';
+            solutionSummaryBadge.textContent = 'From your input';
+          }
+          solutionSummaryText.innerHTML = formatInsightValue(body);
+        } else {
+          solutionSummary.style.display = 'none';
+        }
+      }
       // store current idea id (if saved)
       if (json && json._id) currentIdeaId = json._id;
       // render radar chart (if Chart.js available)
@@ -268,6 +326,10 @@ function renderInsights(insights, container) {
 
   const lc = insights.leanCanvas || {};
   const sections = [];
+
+  if (insights.overallSummary) {
+    sections.push(`<p>${formatInsightValue(insights.overallSummary)}</p>`);
+  }
 
   const pushSection = (title, body) => {
     if (!body) return;
