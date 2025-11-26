@@ -3,13 +3,15 @@ const router = express.Router();
 const Idea = require('../models/Idea');
 const insightEngine = require('../lib/insightEngine');
 const { computeDeltas, explainDeltas } = require('../lib/versionUtils');
-
-// Simple in-memory fallback store when MongoDB isn't available (development/demo)
 const inMemory = require('../lib/inMemoryStore');
 
-function makeId() { return 'mem_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2,8); }
+const IDEA_FIELDS = ['problem', 'solution', 'audience', 'alternatives', 'technology'];
 
-function withLatestInsights(doc) {
+function createMemoryId() {
+  return 'mem_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8);
+}
+
+function attachLatestInsights(doc) {
   if (!doc) return null;
   const base = typeof doc.toObject === 'function' ? doc.toObject() : { ...doc };
   const versions = base.versions || [];
@@ -20,117 +22,148 @@ function withLatestInsights(doc) {
   return base;
 }
 
-function isLlmEnabled() {
+function isOllamaProvider() {
   return process.env.LLM_PROVIDER && process.env.LLM_PROVIDER.toLowerCase() === 'ollama';
 }
 
-function requireLlm(res) {
-  if (isLlmEnabled()) return true;
+function ensureLlmConfigured(res) {
+  if (isOllamaProvider()) return true;
   res.status(503).json({ error: 'LLM_PROVIDER must be set to "ollama". The heuristic insight generator has been removed.' });
   return false;
 }
 
-// POST /api/ideas
-// Create a new idea (first revision)
+function extractIdeaInputs(source = {}) {
+  return IDEA_FIELDS.reduce((acc, field) => {
+    const value = source[field];
+    acc[field] = typeof value === 'string' ? value : (value ?? '');
+    return acc;
+  }, {});
+}
+
+async function generateInsightBundle(inputs) {
+  const scores = await insightEngine.generateScoresLLM(inputs);
+  const leanCanvas = await insightEngine.draftLeanCanvasLLM(inputs);
+  return { ...scores, leanCanvas };
+}
+
+function buildVersion(inputs, insights) {
+  return {
+    inputs,
+    insights,
+    createdAt: new Date()
+  };
+}
+
+async function findIdeaById(id, { lean = false } = {}) {
+  try {
+    return lean ? await Idea.findById(id).lean() : await Idea.findById(id);
+  } catch (err) {
+    return null;
+  }
+}
+
+function getMemoryIdea(id) {
+  return inMemory.ideas[id] || null;
+}
+
+function saveIdeaToMemory(inputs, version) {
+  const now = new Date();
+  const stored = {
+    _id: createMemoryId(),
+    ...inputs,
+    createdAt: now,
+    updatedAt: now,
+    versions: [version],
+    saved: false
+  };
+  inMemory.ideas[stored._id] = stored;
+  return stored;
+}
+
+async function persistNewIdea(inputs, version) {
+  const idea = new Idea({ ...inputs, versions: [version] });
+  try {
+    const saved = await idea.save();
+    return attachLatestInsights(saved);
+  } catch (err) {
+    console.error('DB save failed, falling back to in-memory store', err.message || err);
+    const stored = saveIdeaToMemory(inputs, version);
+    return attachLatestInsights(stored);
+  }
+}
+
+async function appendVersionToDocument(doc, inputs, version) {
+  doc.versions.push(version);
+  IDEA_FIELDS.forEach(field => {
+    doc[field] = inputs[field];
+  });
+  doc.updatedAt = new Date();
+  await doc.save();
+}
+
+function appendVersionToMemory(mem, inputs, version) {
+  mem.versions.push(version);
+  IDEA_FIELDS.forEach(field => {
+    mem[field] = inputs[field];
+  });
+  mem.updatedAt = new Date();
+  return mem;
+}
+
+async function resolveVersions(id) {
+  const idea = await findIdeaById(id, { lean: true });
+  if (idea) return idea.versions || [];
+  const mem = getMemoryIdea(id);
+  return mem ? mem.versions || [] : null;
+}
+
+// POST /api/ideas -> create a new idea (first revision)
 router.post('/', async (req, res) => {
   try {
-    if (!requireLlm(res)) return;
-    const { problem, solution, audience, alternatives, technology } = req.body;
-    const inputs = { problem, solution, audience, alternatives, technology };
-    const insights = await insightEngine.generateScoresLLM(inputs);
-    const leanCanvas = await insightEngine.draftLeanCanvasLLM(inputs);
-    const latestInsights = { ...insights, leanCanvas };
-    const idea = new Idea({
-      problem,
-      solution,
-      audience,
-      alternatives,
-      technology,
-      versions: [{
-        inputs: { problem, solution, audience, alternatives, technology },
-        insights: latestInsights
-      }]
-    });
-
-    try {
-      const saved = await idea.save();
-      const payload = withLatestInsights(saved);
-      return res.status(201).json(payload);
-    } catch (saveErr) {
-      console.error('DB save failed, falling back to in-memory store', saveErr.message || saveErr);
-      const id = makeId();
-      const stored = {
-        _id: id,
-        problem,
-        solution,
-        audience,
-        alternatives,
-        technology,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        versions: [{
-          inputs: { problem, solution, audience, alternatives, technology },
-          insights: latestInsights,
-          createdAt: new Date()
-        }],
-        saved: false
-      };
-      inMemory.ideas[id] = stored;
-      return res.status(201).json({ ...stored, insights: latestInsights });
-    }
+    if (!ensureLlmConfigured(res)) return;
+    const inputs = extractIdeaInputs(req.body);
+    const insights = await generateInsightBundle(inputs);
+    const version = buildVersion(inputs, insights);
+    const payload = await persistNewIdea(inputs, version);
+    return res.status(201).json(payload);
   } catch (err) {
     console.error('Error saving idea', err);
     res.status(500).json({ error: 'Unable to process idea', detail: err && err.message ? err.message : String(err) });
   }
 });
 
-// GET /api/ideas/:id
+// GET /api/ideas/:id -> fetch latest idea snapshot
 router.get('/:id', async (req, res) => {
   try {
-    // Try DB first, then in-memory fallback
-    let idea = null;
-    try { idea = await Idea.findById(req.params.id).lean(); } catch (e) { idea = null; }
-    if (!idea) {
-      const mem = inMemory.ideas[req.params.id];
-      if (!mem) return res.status(404).json({ error: 'Not found' });
-      return res.json(withLatestInsights(mem));
-    }
-    res.json(withLatestInsights(idea));
+    const idea = await findIdeaById(req.params.id, { lean: true });
+    if (idea) return res.json(attachLatestInsights(idea));
+    const mem = getMemoryIdea(req.params.id);
+    if (mem) return res.json(attachLatestInsights(mem));
+    return res.status(404).json({ error: 'Not found' });
   } catch (err) {
     console.error('Error fetching idea', err);
     res.status(500).json({ error: 'Unable to fetch idea' });
   }
 });
 
-// POST /api/ideas/:id/versions  -> add a new revision/version
+// POST /api/ideas/:id/versions -> add a new revision/version
 router.post('/:id/versions', async (req, res) => {
   try {
-    if (!requireLlm(res)) return;
-    let idea = null;
-    try { idea = await Idea.findById(req.params.id); } catch (e) { idea = null; }
-    if (!idea) {
-      // fallback to in-memory idea
-      const mem = inMemory.ideas[req.params.id];
-      if (!mem) return res.status(404).json({ error: 'Not found' });
-      const { problem, solution, audience, alternatives, technology } = req.body;
-      const inputs = { problem, solution, audience, alternatives, technology };
-      const insights = await insightEngine.generateScoresLLM(inputs);
-      const leanCanvas = await insightEngine.draftLeanCanvasLLM(inputs);
-      const version = { inputs: { problem, solution, audience, alternatives, technology }, insights: { ...insights, leanCanvas }, createdAt: new Date() };
-      mem.versions.push(version);
-      mem.updatedAt = new Date();
-      inMemory.ideas[req.params.id] = mem;
+    if (!ensureLlmConfigured(res)) return;
+    const inputs = extractIdeaInputs(req.body);
+    const insights = await generateInsightBundle(inputs);
+    const version = buildVersion(inputs, insights);
+
+    const idea = await findIdeaById(req.params.id);
+    if (idea) {
+      await appendVersionToDocument(idea, inputs, version);
       return res.status(201).json({ ok: true, version });
     }
-    const { problem, solution, audience, alternatives, technology } = req.body;
-    const inputs = { problem, solution, audience, alternatives, technology };
-    const insights = await insightEngine.generateScoresLLM(inputs);
-    const leanCanvas = await insightEngine.draftLeanCanvasLLM(inputs);
-    const version = { inputs: { problem, solution, audience, alternatives, technology }, insights: { ...insights, leanCanvas }, createdAt: new Date() };
-    idea.versions.push(version);
-    idea.problem = problem; idea.solution = solution; idea.audience = audience; idea.alternatives = alternatives; idea.technology = technology;
-    idea.updatedAt = new Date();
-    await idea.save();
+
+    const mem = getMemoryIdea(req.params.id);
+    if (!mem) return res.status(404).json({ error: 'Not found' });
+    appendVersionToMemory(mem, inputs, version);
+    inMemory.ideas[req.params.id] = mem;
     return res.status(201).json({ ok: true, version });
   } catch (err) {
     console.error('Error adding version', err);
@@ -141,41 +174,27 @@ router.post('/:id/versions', async (req, res) => {
 // GET /api/ideas/:id/versions -> list versions
 router.get('/:id/versions', async (req, res) => {
   try {
-    let idea = null;
-    try { idea = await Idea.findById(req.params.id).lean(); } catch (e) { idea = null; }
-    if (!idea) {
-      const mem = inMemory.ideas[req.params.id];
-      if (!mem) return res.status(404).json({ error: 'Not found' });
-      return res.json({ versions: mem.versions || [] });
-    }
-    res.json({ versions: idea.versions || [] });
+    const versions = await resolveVersions(req.params.id);
+    if (!versions) return res.status(404).json({ error: 'Not found' });
+    res.json({ versions });
   } catch (err) {
     console.error('Error fetching versions', err);
     res.status(500).json({ error: 'Unable to fetch versions' });
   }
 });
 
-// GET /api/ideas/:id/compare -> compare first vs latest and return deltas + explanation
+// GET /api/ideas/:id/compare -> compare first vs latest
 router.get('/:id/compare', async (req, res) => {
   try {
-    let idea = null;
-    try { idea = await Idea.findById(req.params.id).lean(); } catch (e) { idea = null; }
-    let versions = [];
-    if (!idea) {
-      const mem = inMemory.ideas[req.params.id];
-      if (!mem) return res.status(404).json({ error: 'Not found' });
-      versions = mem.versions || [];
-    } else {
-      versions = idea.versions || [];
-    }
-    if (versions.length === 0) return res.status(400).json({ error: 'No versions to compare' });
-    const first = versions[0].insights || {};
-    const latest = versions[versions.length - 1].insights || {};
-    const deltas = computeDeltas(first, latest);
-    const firstInputs = (versions[0] && versions[0].inputs) ? versions[0].inputs : {};
-    const latestInputs = (versions[versions.length - 1] && versions[versions.length - 1].inputs) ? versions[versions.length - 1].inputs : {};
-    const explanation = await explainDeltas(deltas, firstInputs, latestInputs);
-    return res.json({ deltas, explanation, first, latest });
+    const versions = await resolveVersions(req.params.id);
+    if (!versions) return res.status(404).json({ error: 'Not found' });
+    if (!versions.length) return res.status(400).json({ error: 'No versions to compare' });
+
+    const firstVersion = versions[0];
+    const latestVersion = versions[versions.length - 1];
+    const deltas = computeDeltas(firstVersion.insights || {}, latestVersion.insights || {});
+    const explanation = await explainDeltas(deltas, firstVersion.inputs || {}, latestVersion.inputs || {});
+    return res.json({ deltas, explanation, first: firstVersion.insights || {}, latest: latestVersion.insights || {} });
   } catch (err) {
     console.error('Error comparing versions', err);
     res.status(500).json({ error: 'Unable to compare versions' });

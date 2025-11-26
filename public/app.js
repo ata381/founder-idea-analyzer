@@ -1,3 +1,23 @@
+const METRIC_KEYS = [
+  'problemValidationScore',
+  'marketMaturity',
+  'competitionDensity',
+  'differentiationPotential',
+  'technicalFeasibility',
+  'riskAndUncertainty'
+];
+
+const METRIC_LABELS = {
+  problemValidationScore: 'Problem validation',
+  marketMaturity: 'Market maturity',
+  competitionDensity: 'Competition density',
+  differentiationPotential: 'Differentiation',
+  technicalFeasibility: 'Technical feasibility',
+  riskAndUncertainty: 'Risk / Uncertainty'
+};
+
+const SCORE_CARD_META = METRIC_KEYS.map((key) => ({ key, label: METRIC_LABELS[key] }));
+
 async function postIdea(data) {
   const res = await fetch('/api/ideas', {
     method: 'POST',
@@ -30,8 +50,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const blindSpotsList = el('blind-spots-list');
   const weeklySummaryText = el('weekly-summary-text');
   const statusBanner = el('status-banner');
-  const statusBadge = el('status-badge');
-  const statusBadgeText = el('status-badge') ? el('status-badge').querySelector('.status-badge__text') : null;
+  const statusText = el('status-text');
+  
   const solutionSummary = el('solution-summary');
   const solutionSummaryLabel = el('solution-summary-label');
   const solutionSummaryBadge = el('solution-summary-badge');
@@ -39,22 +59,19 @@ document.addEventListener('DOMContentLoaded', () => {
   let currentIdeaId = null;
 
   function setStatus(message, tone = 'muted') {
-    if (!statusBanner) return;
-    statusBanner.textContent = message;
+    if (!statusBanner || !statusText) return;
+    statusText.textContent = message;
     statusBanner.dataset.tone = tone;
   }
 
   function setOnlineStatus(isOnline) {
-    if (!statusBadge || !statusBadgeText) return;
-    statusBadge.classList.remove('status-badge--online', 'status-badge--offline');
+    if (!statusBanner || !statusText) return;
     if (isOnline) {
-      statusBadge.classList.add('status-badge--online');
-      statusBadgeText.textContent = 'Online';
-      if (statusBanner) statusBanner.dataset.tone = 'success';
+      statusText.textContent = 'System Online';
+      statusBanner.dataset.tone = 'success';
     } else {
-      statusBadge.classList.add('status-badge--offline');
-      statusBadgeText.textContent = 'Offline';
-      if (statusBanner) statusBanner.dataset.tone = 'error';
+      statusText.textContent = 'System Offline';
+      statusBanner.dataset.tone = 'error';
     }
   }
 
@@ -67,38 +84,51 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  setStatus('Ready for your idea.');
+  // Initial check
   checkHealth();
+
+  function setAwarenessProgress(value) {
+    // This function can be expanded to animate a progress ring or bar
+    // For now, it ensures the text is updated with visual cues
+    if (!awarenessDeltaText) return;
+    const num = parseInt(value, 10);
+    if (isNaN(num)) {
+        awarenessDeltaText.textContent = value;
+        return;
+    }
+    const sign = num > 0 ? '+' : '';
+    awarenessDeltaText.textContent = `${sign}${num} pts`;
+    awarenessDeltaText.style.color = num > 0 ? '#86efac' : (num < 0 ? '#fca5a5' : 'inherit');
+  }
 
   function updateMentorFromInsights(insights) {
     if (!insights) {
-      if (awarenessDeltaText) awarenessDeltaText.textContent = '—';
+      setAwarenessProgress('—');
       if (blindSpotsList) blindSpotsList.textContent = '—';
-      if (weeklySummaryText) weeklySummaryText.textContent = '—';
+      if (weeklySummaryText) weeklySummaryText.textContent = 'No analysis run yet.';
       return;
     }
-    const keys = ['problemValidationScore','marketMaturity','competitionDensity','differentiationPotential','technicalFeasibility','riskAndUncertainty'];
-    const labels = {
-      problemValidationScore: 'Problem validation',
-      marketMaturity: 'Market maturity',
-      competitionDensity: 'Competition density',
-      differentiationPotential: 'Differentiation',
-      technicalFeasibility: 'Technical feasibility',
-      riskAndUncertainty: 'Risk / Uncertainty'
-    };
-    // awareness delta: average distance from neutral (50)
-    const vals = keys.map(k => (typeof insights[k] === 'number') ? insights[k] : 0);
-    const avg = Math.round(vals.reduce((s,v)=>s+v,0)/vals.length);
-    const awarenessDelta = avg - 50; // positive means more aware/validated
-    if (awarenessDeltaText) awarenessDeltaText.textContent = `${awarenessDelta >= 0 ? '+' : ''}${awarenessDelta} pts (avg ${avg})`;
+    let sum = 0;
+    const blind = [];
+    const strong = [];
+    const weak = [];
 
-    // blind spots: metrics below 40
-    const blind = keys.filter((k,i)=>vals[i] < 40).map(k=>labels[k]);
+    METRIC_KEYS.forEach((key) => {
+      const value = typeof insights[key] === 'number' ? insights[key] : 0;
+      sum += value;
+      if (value < 40) {
+        blind.push(METRIC_LABELS[key]);
+        weak.push(METRIC_LABELS[key]);
+      } else if (value >= 65) {
+        strong.push(METRIC_LABELS[key]);
+      }
+    });
+
+    const awarenessDelta = Math.round(sum / METRIC_KEYS.length) - 50;
+    setAwarenessProgress(awarenessDelta);
+
     if (blindSpotsList) blindSpotsList.textContent = blind.length ? blind.join(', ') : 'None detected';
 
-    // weekly summary: quick qualitative summary
-    const strong = keys.filter((k,i)=>vals[i] >= 65).map(k=>labels[k]);
-    const weak = keys.filter((k,i)=>vals[i] < 40).map(k=>labels[k]);
     let summary = '';
     if (strong.length) summary += `Strengths: ${strong.join(', ')}. `;
     if (weak.length) summary += `Needs attention: ${weak.join(', ')}. `;
@@ -115,16 +145,17 @@ document.addEventListener('DOMContentLoaded', () => {
       alternatives: el('alternatives').value,
       technology: el('technology').value
     };
-    output.textContent = 'Analyzing…';
-    setStatus('Analyzing idea…');
-    if (solutionSummary) {
-      solutionSummary.style.display = 'none';
-    }
+    output.innerHTML = '<p class="placeholder-text">Analyzing your idea...</p>';
+    setStatus('Analyzing...', 'muted');
+    
+    if (solutionSummary) solutionSummary.style.display = 'none';
     if (canvasGrid) canvasGrid.innerHTML = '';
+    
     try {
       const json = await postIdea(data);
       // show the insights
       renderInsights(json.insights, output);
+      
       // update compact solution summary near the form
       if (solutionSummary && json && json.insights && json.insights.leanCanvas) {
         const lc = json.insights.leanCanvas;
@@ -136,52 +167,57 @@ document.addEventListener('DOMContentLoaded', () => {
         if (body) {
           solutionSummary.style.display = 'block';
           if (userProvidedSolution && suggested) {
-            solutionSummaryLabel.textContent = 'Mentor critique of your solution';
-            solutionSummaryBadge.textContent = 'Brutally honest take';
+            solutionSummaryLabel.textContent = 'Mentor Critique';
+            solutionSummaryBadge.textContent = 'Critique';
           } else if (!userProvidedSolution && suggested) {
-            solutionSummaryLabel.textContent = 'Suggested solution from mentor';
-            solutionSummaryBadge.textContent = 'You left solution blank';
+            solutionSummaryLabel.textContent = 'Suggested Solution';
+            solutionSummaryBadge.textContent = 'AI Generated';
           } else {
-            solutionSummaryLabel.textContent = 'Restated solution';
-            solutionSummaryBadge.textContent = 'From your input';
+            solutionSummaryLabel.textContent = 'Solution';
+            solutionSummaryBadge.textContent = 'Restated';
           }
           solutionSummaryText.innerHTML = formatInsightValue(body);
         } else {
           solutionSummary.style.display = 'none';
         }
       }
+      
       // store current idea id (if saved)
       if (json && json._id) currentIdeaId = json._id;
+      
       // render radar chart (if Chart.js available)
       if (window.renderRadar && json.insights) {
         renderRadar(json.insights);
       }
+      
       // render the lean canvas grid
       if (window.renderLeanCanvasGrid && json.insights && json.insights.leanCanvas) {
         renderLeanCanvasGrid(json.insights.leanCanvas);
       } else if (canvasGrid) {
         if (json.insights && json.insights.leanCanvas) {
-          canvasGrid.innerHTML = `<pre style="white-space:pre-wrap;font-size:0.9rem;color:#cbd5e1;background:#030712;border-radius:8px;padding:12px;margin:0">${escapeHtml(JSON.stringify(json.insights.leanCanvas, null, 2))}</pre>`;
+          canvasGrid.innerHTML = `<pre style="white-space:pre-wrap;font-size:0.9rem;color:#cbd5e1;background:rgba(0,0,0,0.3);border-radius:8px;padding:12px;margin:0">${escapeHtml(JSON.stringify(json.insights.leanCanvas, null, 2))}</pre>`;
         } else {
           canvasGrid.innerHTML = '<div style="color:#94a3b8">No canvas returned.</div>';
         }
       }
+      
       // update Mentor Dashboard from the returned insights
       updateMentorFromInsights(json.insights);
+      
       // surface any LLM warning from the insights or lean canvas
       let tone = 'success';
-      let message = 'Analysis complete. Save a revision to track improvements.';
+      let message = 'Analysis complete.';
       if (json && json.insights) {
         const w = json.insights.llmWarning || (json.insights.leanCanvas && json.insights.leanCanvas.llmWarning);
         if (w) {
           tone = 'warning';
-          message = `LLM warning: ${w}`;
+          message = `Warning: ${w}`;
         }
       }
       setStatus(message, tone);
     } catch (err) {
       output.textContent = 'Error: ' + err.message;
-      setStatus(`Analysis failed: ${err.message}`, 'error');
+      setStatus(`Error: ${err.message}`, 'error');
     }
   });
 
@@ -218,45 +254,36 @@ document.addEventListener('DOMContentLoaded', () => {
       const payload = await r.json();
       // build detailed comparison UI
       const deltas = payload.deltas || {};
-      const order = ['problemValidationScore','marketMaturity','competitionDensity','differentiationPotential','technicalFeasibility','riskAndUncertainty'];
-      const labels = {
-        problemValidationScore: 'Problem validation',
-        marketMaturity: 'Market maturity',
-        competitionDensity: 'Competition density',
-        differentiationPotential: 'Differentiation',
-        technicalFeasibility: 'Technical feasibility',
-        riskAndUncertainty: 'Risk / Uncertainty'
-      };
 
       let html = '<div style="display:flex;flex-direction:column;gap:8px">';
-      html += `<div style="color:#cbd5e1">${payload.explanation}</div>`;
-      html += '<div style="overflow:auto;margin-top:8px"><table style="width:100%;border-collapse:collapse;font-family:system-ui"><thead><tr style="text-align:left;color:#9ca3af"><th style="padding:6px 8px">Metric</th><th style="padding:6px 8px">From</th><th style="padding:6px 8px">To</th><th style="padding:6px 8px">Δ</th></tr></thead><tbody>';
+      html += `<div style="color:#cbd5e1;font-size:0.9rem">${payload.explanation}</div>`;
+      html += '<div style="overflow:auto;margin-top:8px"><table style="width:100%;border-collapse:collapse;font-size:0.9rem"><thead><tr style="text-align:left;color:#9ca3af"><th style="padding:6px 8px">Metric</th><th style="padding:6px 8px">From</th><th style="padding:6px 8px">To</th><th style="padding:6px 8px">Δ</th></tr></thead><tbody>';
 
-      order.forEach(k => {
-        const d = deltas[k] || { from: 0, to: 0, delta: 0 };
-        const delta = d.delta || 0;
-        const arrow = delta > 0 ? '▲' : (delta < 0 ? '▼' : '');
-        const color = delta > 0 ? '#86efac' : (delta < 0 ? '#fca5a5' : '#cbd5e1');
-        html += `<tr><td style="padding:6px 8px;color:#e6eef8">${labels[k]}</td><td style="padding:6px 8px;color:#9ca3af">${d.from}</td><td style="padding:6px 8px;color:#9ca3af">${d.to}</td><td style="padding:6px 8px;color:${color};font-weight:600">${arrow} ${delta}</td></tr>`;
+      const latest = payload.latest || {};
+      let totalDeltaMagnitude = 0;
+      const blind = [];
+
+      METRIC_KEYS.forEach((key) => {
+        const deltaEntry = deltas[key] || { from: 0, to: 0, delta: 0 };
+        const deltaValue = deltaEntry.delta || 0;
+        totalDeltaMagnitude += Math.abs(deltaValue);
+
+        const arrow = deltaValue > 0 ? '▲' : (deltaValue < 0 ? '▼' : '');
+        const color = deltaValue > 0 ? '#86efac' : (deltaValue < 0 ? '#fca5a5' : '#cbd5e1');
+        html += `<tr><td style="padding:6px 8px;color:#e6eef8">${METRIC_LABELS[key]}</td><td style="padding:6px 8px;color:#9ca3af">${deltaEntry.from}</td><td style="padding:6px 8px;color:#9ca3af">${deltaEntry.to}</td><td style="padding:6px 8px;color:${color};font-weight:600">${arrow} ${deltaValue}</td></tr>`;
+
+        const latestValue = typeof latest[key] === 'number' ? latest[key] : 0;
+        if (latestValue < 40) blind.push(METRIC_LABELS[key]);
       });
 
       html += '</tbody></table></div></div>';
       if (comparisonOutput) comparisonOutput.innerHTML = html;
 
-      // awareness delta: show average change magnitude
-      const keys = Object.keys(deltas);
-      const avgDelta = Math.round(keys.reduce((s,k)=>s+Math.abs(deltas[k].delta),0)/Math.max(1,keys.length));
-      if (awarenessDeltaText) awarenessDeltaText.textContent = (avgDelta >= 0) ? `${avgDelta} pts (avg change)` : '0';
+      const avgDelta = Math.round(totalDeltaMagnitude / Math.max(1, METRIC_KEYS.length));
+      setAwarenessProgress(avgDelta);
 
-      // blind spots: list metrics below 40 in latest
-      const latest = payload.latest || {};
-      const blind = [];
-      ['problemValidationScore','marketMaturity','competitionDensity','differentiationPotential','technicalFeasibility','riskAndUncertainty'].forEach(k=>{
-        if ((latest[k]||0) < 40) blind.push(labels[k] || k);
-      });
       if (blindSpotsList) blindSpotsList.textContent = blind.length ? blind.join(', ') : 'None detected';
 
-      // weekly summary: simple textual summary
       if (weeklySummaryText) weeklySummaryText.textContent = payload.explanation;
     } catch (err) {
       if (comparisonOutput) comparisonOutput.textContent = 'Error: ' + err.message;
@@ -296,16 +323,7 @@ function renderScoreCards(insights) {
     return;
   }
 
-  const scores = [
-    { key: 'problemValidationScore', label: 'Problem validation' },
-    { key: 'marketMaturity', label: 'Market maturity' },
-    { key: 'competitionDensity', label: 'Competition density' },
-    { key: 'differentiationPotential', label: 'Differentiation' },
-    { key: 'technicalFeasibility', label: 'Technical feasibility' },
-    { key: 'riskAndUncertainty', label: 'Risk / Uncertainty' }
-  ];
-
-  container.innerHTML = scores.map(({ key, label }) => {
+  container.innerHTML = SCORE_CARD_META.map(({ key, label }) => {
     const value = (typeof insights[key] === 'number') ? insights[key] : 0;
     return `
       <div class="insight-score-card">
