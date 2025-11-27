@@ -20,7 +20,7 @@ Founder Idea Analyzer is a lightweight startup-evaluation workbench. A founder f
 
 - Node.js 18+
 - MongoDB (local or remote) if you want persistence
-- [Ollama](https://ollama.com/) running locally with the model you configure (`OLLAMA_MODEL`).
+- [Ollama](https://ollama.com/) running locally with the model you configure (`llama3.1:8b`).
 
 ## Setup
 
