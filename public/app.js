@@ -98,7 +98,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     const sign = num > 0 ? '+' : '';
     awarenessDeltaText.textContent = `${sign}${num} pts`;
-    awarenessDeltaText.style.color = num > 0 ? '#86efac' : (num < 0 ? '#fca5a5' : 'inherit');
+    awarenessDeltaText.style.color = num > 0 ? 'var(--ios-green)' : (num < 0 ? 'var(--ios-rose)' : 'inherit');
   }
 
   function updateMentorFromInsights(insights) {
@@ -256,8 +256,8 @@ document.addEventListener('DOMContentLoaded', () => {
       const deltas = payload.deltas || {};
 
       let html = '<div style="display:flex;flex-direction:column;gap:8px">';
-      html += `<div style="color:#cbd5e1;font-size:0.9rem">${payload.explanation}</div>`;
-      html += '<div style="overflow:auto;margin-top:8px"><table style="width:100%;border-collapse:collapse;font-size:0.9rem"><thead><tr style="text-align:left;color:#9ca3af"><th style="padding:6px 8px">Metric</th><th style="padding:6px 8px">From</th><th style="padding:6px 8px">To</th><th style="padding:6px 8px">Δ</th></tr></thead><tbody>';
+      // Removed the duplicate explanation text here since it is shown in the weekly summary box
+      html += '<div style="overflow:auto;margin-top:8px"><table style="width:100%;border-collapse:collapse;font-size:0.9rem"><thead><tr style="text-align:left;color:var(--ios-text-muted)"><th style="padding:6px 8px">Metric</th><th style="padding:6px 8px">From</th><th style="padding:6px 8px">To</th><th style="padding:6px 8px">Δ</th></tr></thead><tbody>';
 
       const latest = payload.latest || {};
       let totalDeltaMagnitude = 0;
@@ -269,8 +269,8 @@ document.addEventListener('DOMContentLoaded', () => {
         totalDeltaMagnitude += Math.abs(deltaValue);
 
         const arrow = deltaValue > 0 ? '▲' : (deltaValue < 0 ? '▼' : '');
-        const color = deltaValue > 0 ? '#86efac' : (deltaValue < 0 ? '#fca5a5' : '#cbd5e1');
-        html += `<tr><td style="padding:6px 8px;color:#e6eef8">${METRIC_LABELS[key]}</td><td style="padding:6px 8px;color:#9ca3af">${deltaEntry.from}</td><td style="padding:6px 8px;color:#9ca3af">${deltaEntry.to}</td><td style="padding:6px 8px;color:${color};font-weight:600">${arrow} ${deltaValue}</td></tr>`;
+        const color = deltaValue > 0 ? 'var(--ios-green)' : (deltaValue < 0 ? 'var(--ios-rose)' : 'var(--ios-text-muted)');
+        html += `<tr><td style="padding:6px 8px;color:var(--ios-text)">${METRIC_LABELS[key]}</td><td style="padding:6px 8px;color:var(--ios-text-muted)">${deltaEntry.from}</td><td style="padding:6px 8px;color:var(--ios-text-muted)">${deltaEntry.to}</td><td style="padding:6px 8px;color:${color};font-weight:600">${arrow} ${deltaValue}</td></tr>`;
 
         const latestValue = typeof latest[key] === 'number' ? latest[key] : 0;
         if (latestValue < 40) blind.push(METRIC_LABELS[key]);
@@ -284,7 +284,27 @@ document.addEventListener('DOMContentLoaded', () => {
 
       if (blindSpotsList) blindSpotsList.textContent = blind.length ? blind.join(', ') : 'None detected';
 
-      if (weeklySummaryText) weeklySummaryText.textContent = payload.explanation;
+      if (weeklySummaryText) {
+        // Simple markdown parser for better readability
+        let formatted = escapeHtml(payload.explanation);
+        
+        // Bold: **text** -> <strong>text</strong>
+        formatted = formatted.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+        
+        // List items: * text or - text -> <li>text</li>
+        // We'll wrap lines starting with * or - in a list structure if possible, 
+        // or just add breaks. For simplicity in this context, let's use breaks and bullets.
+        formatted = formatted.replace(/([^\n])\s*\*\s/g, '$1<br>• '); // inline bullets
+        formatted = formatted.replace(/^\*\s/gm, '• '); // start of line bullets
+        
+        // Numbered lists: 1. text -> <br>1. text
+        formatted = formatted.replace(/(\d+\.)/g, '<br><strong>$1</strong>');
+        
+        // Fix double breaks
+        formatted = formatted.replace(/<br><br>/g, '<br>');
+        
+        weeklySummaryText.innerHTML = formatted;
+      }
     } catch (err) {
       if (comparisonOutput) comparisonOutput.textContent = 'Error: ' + err.message;
     }
