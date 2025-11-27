@@ -1,42 +1,72 @@
 # Founder Idea Analyzer
 
-This repository contains the Founder Idea Analyzer — a small platform to help founders validate ideas, generate a Lean Canvas draft, and track early awareness growth. It's designed as a frontend-first interview project with a Node.js (vanilla) + MongoDB backend.
+Founder Idea Analyzer is a lightweight startup-evaluation workbench. A founder fills in the Idea Definition form, the backend generates LLM-backed scores plus a Lean Canvas draft, and the frontend visualises the results with a radar chart, mentor dashboard, and colourful UI.
 
-## Goal (Interview Pre-task)
-Deliver a working mini-application that demonstrates an idea analysis flow: user answers a short form → backend generates LLM-backed insights → frontend displays results (radar chart + lean canvas) → simple mentor dashboard shows awareness delta. Focus on clear UI and demo-ready flow.
+## Features
 
-## Iteration 1 — Mülakat (Interview) Delivery (English)
-Purpose: produce a demoable, production-minded implementation of the Idea Analysis Module that the interviewers can run locally and review in 5–10 minutes.
+- **Idea Definition Form** – Capture problem, solution, target audience, competitors, and technology choices.
+- **LLM Insight Engine** – Talks to a local Ollama model to produce six quantitative scores and a Lean Canvas JSON block.
+- **Mentor Dashboard** – Shows awareness delta, blind spots, revision comparisons, and a weekly summary.
+- **Versioning API** – Append new revisions, list version history, and compare first vs latest to highlight deltas.
+- **Responsive UI** – Modern beige theme, centered analysis results, lean canvas grid, and Chart.js radar visual.
 
-Deliverables
-- Working idea submission form (frontend) that posts to `POST /api/ideas` and receives `insights`.
-- LLM-powered Insight Engine that outputs 6 scores (0–100) and a draft Lean Canvas JSON via Ollama.
-- Radar chart visualization of the 6 scores.
-- Lean Canvas grid view filled from the draft output.
-- Mentor Dashboard (simple mock) showing awareness delta and blind spots.
-- Clean UI and a README with setup + demo steps.
+## Tech Stack
 
-Acceptance Criteria
-- End-to-end flow works locally: form → POST → saved in MongoDB → response rendered as radar + canvas.
-- Visuals are responsive and demoable.
-- Code structure is clear: `lib/`, `models/`, `routes/`, `public/`.
-- No Docker required. Use local MongoDB (set `MONGO_URI` in `.env`).
+- **Backend:** Node.js + Express, MongoDB (with in-memory fallback).
+- **Frontend:** Vanilla HTML/CSS/JS with Chart.js.
+- **AI:** Ollama model (defaults to `llama3.1:8b`).
 
-Run locally (Windows PowerShell)
-```powershell
-cd c:\Users\Aakil\Documents\GitHub\founder-idea-analyzer
+## Prerequisites
+
+- Node.js 18+
+- MongoDB (local or remote) if you want persistence
+- [Ollama](https://ollama.com/) running locally with the model you configure (`OLLAMA_MODEL`).
+
+## Setup
+
+```bash
+git clone https://github.com/ata381/founder-idea-analyzer.git
+cd founder-idea-analyzer
 npm install
-node server.js
-# or if you prefer nodemon and PowerShell scripts are allowed:
-# npm.cmd run dev
 ```
-Open: http://localhost:4000
 
-## Next steps (after interview)
-- Iterate on LLM prompts and add tests.
-- Add versioned idea edits and comparison endpoints (for Mentor Dashboard).
-- Integrate local LLM for richer insights (Iteration 4).
+Create a `.env` file (copy `.env.example` if present) and set at least:
 
----
+```
+MONGO_URI=mongodb://127.0.0.1:27017/founder-idea
+LLM_PROVIDER=ollama
+OLLAMA_MODEL=llama3.1:8b
+PORT=4000
+```
 
-If you'd like, I will create GitHub issues for all Iteration 1 tasks and link them here.
+Start MongoDB and Ollama locally, then run:
+
+```bash
+npm start        # runs node server.js
+# or
+npm run dev      # if you have nodemon installed
+```
+
+Visit <http://localhost:4000>.
+
+## API Overview
+
+| Method | Endpoint | Description |
+| --- | --- | --- |
+| POST | `/api/ideas` | Create a new idea, generate insights + Lean Canvas |
+| GET | `/api/ideas/:id` | Fetch idea with latest insights |
+| POST | `/api/ideas/:id/versions` | Append a new revision/version |
+| GET | `/api/ideas/:id/versions` | List all versions |
+| GET | `/api/ideas/:id/compare` | Compare first vs latest version and return deltas |
+| GET | `/health` | Simple health-check |
+
+All idea endpoints require `LLM_PROVIDER=ollama` because the heuristic fallback has been removed.
+
+## Development Notes
+
+- Frontend assets live under `public/`. `public/app.js` wires the form to the API, renders charts, and drives the mentor dashboard.
+- `lib/insightEngine.js` contains the prompts for score generation and Lean Canvas drafting.
+- `routes/ideas.js` hosts all persistence logic and the in-memory fallback for demo scenarios.
+- `scripts/` includes helper utilities for seeding and exporting demo data.
+
+Feel free to open an issue or fork the repo if you want to extend the prompts, add tests, or plug in another LLM provider.
